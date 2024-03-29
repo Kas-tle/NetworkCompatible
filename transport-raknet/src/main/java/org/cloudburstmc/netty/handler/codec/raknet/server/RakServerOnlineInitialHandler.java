@@ -20,11 +20,12 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.util.internal.logging.InternalLogger;
+import io.netty.util.internal.logging.InternalLoggerFactory;
 import org.cloudburstmc.netty.channel.raknet.RakChildChannel;
 import org.cloudburstmc.netty.channel.raknet.RakDisconnectReason;
 import org.cloudburstmc.netty.channel.raknet.RakPriority;
 import org.cloudburstmc.netty.channel.raknet.RakReliability;
-import org.cloudburstmc.netty.channel.raknet.config.RakChannelConfig;
 import org.cloudburstmc.netty.channel.raknet.config.RakServerChannelConfig;
 import org.cloudburstmc.netty.channel.raknet.packet.EncapsulatedPacket;
 import org.cloudburstmc.netty.channel.raknet.packet.RakMessage;
@@ -33,15 +34,17 @@ import org.cloudburstmc.netty.util.RakUtils;
 
 import java.net.Inet6Address;
 import java.net.InetSocketAddress;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.cloudburstmc.netty.channel.raknet.RakConstants.*;
 
 @Sharable
 public class RakServerOnlineInitialHandler extends SimpleChannelInboundHandler<EncapsulatedPacket> {
-
     public static final String NAME = "rak-server-online-initial-handler";
+    private static final InternalLogger log = InternalLoggerFactory.getInstance(RakServerOnlineInitialHandler.class);
 
     private final RakChildChannel channel;
+    private final AtomicInteger retriesCounter = new AtomicInteger(5);
 
     public RakServerOnlineInitialHandler(RakChildChannel channel) {
         this.channel = channel;
@@ -73,12 +76,15 @@ public class RakServerOnlineInitialHandler extends SimpleChannelInboundHandler<E
 
     private void onConnectionRequest(ChannelHandlerContext ctx, ByteBuf buffer) {
         buffer.skipBytes(1);
-        long guid = ((RakChannelConfig) this.channel.config()).getGuid();
+        long guid = this.channel.config().getGuid();
         long serverGuid = buffer.readLong();
         long timestamp = buffer.readLong();
         boolean security = buffer.readBoolean();
 
-        if (serverGuid != guid || security) {
+        if (this.retriesCounter.decrementAndGet() < 0) {
+            this.sendConnectionRequestFailed(ctx, guid);
+            log.warn("[{}] Connection request failed due to too many retries", this.channel.remoteAddress());
+        } else if (serverGuid != guid || security) {
             this.sendConnectionRequestFailed(ctx, guid);
         } else {
             this.sendConnectionRequestAccepted(ctx, timestamp);
@@ -86,7 +92,7 @@ public class RakServerOnlineInitialHandler extends SimpleChannelInboundHandler<E
     }
 
     private void sendConnectionRequestAccepted(ChannelHandlerContext ctx, long time) {
-        InetSocketAddress address = ((InetSocketAddress) this.channel.remoteAddress());
+        InetSocketAddress address = this.channel.remoteAddress();
         boolean ipv6 = address.getAddress() instanceof Inet6Address;
         ByteBuf outBuf = ctx.alloc().ioBuffer(ipv6 ? 628 : 166);
 
@@ -99,7 +105,7 @@ public class RakServerOnlineInitialHandler extends SimpleChannelInboundHandler<E
         outBuf.writeLong(time);
         outBuf.writeLong(System.currentTimeMillis());
 
-        ctx.writeAndFlush(new RakMessage(outBuf, RakReliability.RELIABLE, RakPriority.IMMEDIATE));
+        ctx.writeAndFlush(new RakMessage(outBuf, RakReliability.UNRELIABLE, RakPriority.IMMEDIATE));
     }
 
     private void sendConnectionRequestFailed(ChannelHandlerContext ctx, long guid) {

@@ -44,7 +44,6 @@ import static org.cloudburstmc.netty.channel.raknet.RakConstants.*;
 
 public class RakServerOfflineHandler extends AdvancedChannelInboundHandler<DatagramPacket> {
     public static final String NAME = "rak-offline-handler";
-    private static final int MAX_PACKETS_PER_SECOND = 10;
 
     private static final InternalLogger log = InternalLoggerFactory.getInstance(RakServerOfflineHandler.class);
 
@@ -58,6 +57,12 @@ public class RakServerOfflineHandler extends AdvancedChannelInboundHandler<Datag
             .expiration(1, TimeUnit.SECONDS)
             .expirationPolicy(ExpirationPolicy.CREATED)
             .build();
+
+    private final RakServerChannel channel;
+
+    public RakServerOfflineHandler(RakServerChannel channel) {
+        this.channel = channel;
+    }
 
     @Override
     protected boolean acceptInboundMessage(ChannelHandlerContext ctx, Object msg) throws Exception {
@@ -100,8 +105,9 @@ public class RakServerOfflineHandler extends AdvancedChannelInboundHandler<Datag
         long guid = ctx.channel().config().getOption(RakChannelOption.RAK_GUID);
 
         AtomicInteger counter = this.packetsCounter.computeIfAbsent(packet.sender().getAddress(), s -> new AtomicInteger());
-        if (counter.incrementAndGet() > MAX_PACKETS_PER_SECOND) {
+        if (counter.incrementAndGet() > this.channel.config().getUnconnectedPacketLimit()) {
             log.warn("[{}] Sent too many packets per second", packet.sender());
+            this.channel.tryBlockAddress(packet.sender().getAddress(), 10, TimeUnit.SECONDS);
             return;
         }
 

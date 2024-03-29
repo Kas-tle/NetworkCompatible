@@ -56,4 +56,16 @@ public interface RakServerChannelConfig extends ChannelConfig {
     int getMinMtu();
 
     RakServerChannelConfig setMinMtu(int mtu);
+
+    int getPacketLimit();
+
+    void setPacketLimit(int limit);
+
+    int getGlobalPacketLimit();
+
+    void setGlobalPacketLimit(int limit);
+
+    int getUnconnectedPacketLimit();
+
+    void setUnconnectedPacketLimit(int limit);
 }

@@ -43,6 +43,9 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
     private volatile boolean handlePing;
     private volatile int maxMtu = RakConstants.MAXIMUM_MTU_SIZE;
     private volatile int minMtu = RakConstants.MINIMUM_MTU_SIZE;
+    private volatile int packetLimit = RakConstants.DEFAULT_PACKET_LIMIT;
+    private volatile int globalPacketLimit = RakConstants.DEFAULT_GLOBAL_PACKET_LIMIT;
+    private volatile int unconnectedPacketLimit = RakConstants.DEFAULT_OFFLINE_PACKET_LIMIT;
 
     public DefaultRakServerConfig(RakServerChannel channel) {
         super(channel);
@@ -86,6 +89,15 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
         if (option == RakChannelOption.RAK_HANDLE_PING) {
             return (T) Boolean.valueOf(this.getHandlePing());
         }
+        if (option == RakChannelOption.RAK_PACKET_LIMIT) {
+            return (T) Integer.valueOf(this.getPacketLimit());
+        }
+        if (option == RakChannelOption.RAK_GLOBAL_PACKET_LIMIT) {
+            return (T) Integer.valueOf(this.getGlobalPacketLimit());
+        }
+        if (option == RakChannelOption.RAK_OFFLINE_PACKET_LIMIT) {
+            return (T) Integer.valueOf(this.getUnconnectedPacketLimit());
+        }
         return this.channel.parent().config().getOption(option);
     }
 
@@ -111,6 +123,12 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
             this.setMaxMtu((Integer) value);
         } else if (option == RakChannelOption.RAK_MIN_MTU) {
             this.setMinMtu((Integer) value);
+        } else if (option == RakChannelOption.RAK_PACKET_LIMIT) {
+            this.setPacketLimit((Integer) value);
+        } else if (option == RakChannelOption.RAK_OFFLINE_PACKET_LIMIT) {
+            this.setUnconnectedPacketLimit((Integer) value);
+        } else if (option == RakChannelOption.RAK_GLOBAL_PACKET_LIMIT) {
+            this.setGlobalPacketLimit((Integer) value);
         } else {
             return this.channel.parent().config().setOption(option, value);
         }
@@ -225,5 +243,35 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
     @Override
     public int getMinMtu() {
         return this.minMtu;
+    }
+
+    @Override
+    public void setPacketLimit(int limit) {
+        this.packetLimit = limit;
+    }
+
+    @Override
+    public int getPacketLimit() {
+        return this.packetLimit;
+    }
+
+    @Override
+    public int getUnconnectedPacketLimit() {
+        return unconnectedPacketLimit;
+    }
+
+    @Override
+    public void setUnconnectedPacketLimit(int unconnectedPacketLimit) {
+        this.unconnectedPacketLimit = unconnectedPacketLimit;
+    }
+
+    @Override
+    public int getGlobalPacketLimit() {
+        return globalPacketLimit;
+    }
+
+    @Override
+    public void setGlobalPacketLimit(int globalPacketLimit) {
+        this.globalPacketLimit = globalPacketLimit;
     }
 }

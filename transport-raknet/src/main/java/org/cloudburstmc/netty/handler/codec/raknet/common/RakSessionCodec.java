@@ -397,11 +397,15 @@ public class RakSessionCodec extends ChannelDuplexHandler {
     }
 
     private void onTick() {
+        long curTime = System.currentTimeMillis();
+
         if (this.state == RakState.UNCONNECTED) {
+            if (this.isTimedOut(curTime)) {
+                this.close(RakDisconnectReason.TIMED_OUT);
+            }
             return;
         }
 
-        long curTime = System.currentTimeMillis();
         if (this.isTimedOut(curTime)) {
             this.disconnect(RakDisconnectReason.TIMED_OUT);
             return;
@@ -760,6 +764,15 @@ public class RakSessionCodec extends ChannelDuplexHandler {
     }
 
     public void close(RakDisconnectReason reason) {
+        if (this.state == RakState.DISCONNECTING) {
+            return;
+        }
+        this.state = RakState.DISCONNECTING;
+
+        if (log.isDebugEnabled()) {
+            log.debug("Closing RakNet Session ({} => {}) due to {}", this.channel.localAddress(), this.getRemoteAddress(), reason);
+        }
+
         this.channel.pipeline().fireUserEventTriggered(reason).close();
     }
 

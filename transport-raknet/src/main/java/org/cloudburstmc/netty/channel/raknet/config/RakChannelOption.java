@@ -133,6 +133,28 @@ public class RakChannelOption<T> extends ChannelOption<T> {
     public static final ChannelOption<Integer> RAK_FLUSH_INTERVAL =
             valueOf(RakChannelOption.class, "RAK_FLUSH_INTERVAL");
 
+    /**
+     * A number of datagram packets each address can send within one RakNet tick (10ms).
+     * Default is 120 packets.
+     */
+    public static final ChannelOption<Integer> RAK_PACKET_LIMIT =
+            valueOf(RakChannelOption.class, "RAK_PACKET_LIMIT");
+
+    /**
+     * A number of "unconnected" datagram packets each address can send within one second.
+     * This includes packets such as UNCONNECTED_PING and OPEN_CONNECTION_REQUEST packets.
+     * Default is 10 packets.
+     */
+    public static final ChannelOption<Integer> RAK_OFFLINE_PACKET_LIMIT =
+            valueOf(RakChannelOption.class, "RAK_OFFLINE_PACKET_LIMIT");
+
+    /**
+     * A number of all datagrams that will be handled within one RakNet tick before server starts dropping any incoming data.
+     * Default is 100_000 (RAK_PACKET_LIMIT * 0.56 * 1500 different connections).
+     */
+    public static final ChannelOption<Integer> RAK_GLOBAL_PACKET_LIMIT =
+            valueOf(RakChannelOption.class, "RAK_GLOBAL_PACKET_LIMIT");
+
     @SuppressWarnings("deprecation")
     protected RakChannelOption() {
         super(null);

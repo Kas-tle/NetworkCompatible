@@ -50,7 +50,18 @@ public class RakConstants {
      * Time after {@link RakSessionCodec} is refreshed due to no activity.
      */
     public static final int SESSION_STALE_MS = 5000;
-
+    /**
+     * A number of datagram packets each address can send within one RakNet tick (10ms)
+     */
+    public static final int DEFAULT_PACKET_LIMIT = 120;
+    /**
+     * A number of "unconnected" datagram packets each address can send within one second.
+     */
+    public static final int DEFAULT_OFFLINE_PACKET_LIMIT = 10;
+    /**
+     * A number of all datagrams that will be handled within one RakNet tick before server starts dropping any incoming data.
+     */
+    public static final int DEFAULT_GLOBAL_PACKET_LIMIT = 100000;
     /*
      * Flags
      */

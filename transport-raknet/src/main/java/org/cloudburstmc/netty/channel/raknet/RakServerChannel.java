@@ -27,13 +27,16 @@ import org.cloudburstmc.netty.channel.raknet.config.DefaultRakServerConfig;
 import org.cloudburstmc.netty.channel.raknet.config.RakServerChannelConfig;
 import org.cloudburstmc.netty.handler.codec.raknet.common.UnconnectedPongEncoder;
 import org.cloudburstmc.netty.handler.codec.raknet.server.RakServerOfflineHandler;
+import org.cloudburstmc.netty.handler.codec.raknet.server.RakServerRateLimiter;
 import org.cloudburstmc.netty.handler.codec.raknet.server.RakServerRouteHandler;
 import org.cloudburstmc.netty.handler.codec.raknet.server.RakServerTailHandler;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 public class RakServerChannel extends ProxyChannel<DatagramChannel> implements ServerChannel {
 
@@ -44,8 +47,9 @@ public class RakServerChannel extends ProxyChannel<DatagramChannel> implements S
         super(channel);
         this.config = new DefaultRakServerConfig(this);
         // Default common handler of offline phase. Handles only raknet packets, forwards rest.
-        this.pipeline.addLast(UnconnectedPongEncoder.NAME, UnconnectedPongEncoder.INSTANCE);
-        this.pipeline.addLast(RakServerOfflineHandler.NAME, new RakServerOfflineHandler());
+        this.pipeline().addLast(UnconnectedPongEncoder.NAME, UnconnectedPongEncoder.INSTANCE);
+        this.pipeline().addLast(RakServerRateLimiter.NAME, new RakServerRateLimiter(this));
+        this.pipeline().addLast(RakServerOfflineHandler.NAME, new RakServerOfflineHandler(this));
         this.pipeline().addLast(RakServerRouteHandler.NAME, new RakServerRouteHandler(this));
         this.pipeline().addLast(RakServerTailHandler.NAME, RakServerTailHandler.INSTANCE);
     }
@@ -90,6 +94,15 @@ public class RakServerChannel extends ProxyChannel<DatagramChannel> implements S
         ChannelPromise combinedPromise = this.newPromise();
         combinedPromise.addListener(future -> super.onCloseTriggered(promise));
         combiner.finish(combinedPromise);
+    }
+
+    public boolean tryBlockAddress(InetAddress address, long time, TimeUnit unit) {
+        RakServerRateLimiter rateLimiter = this.pipeline().get(RakServerRateLimiter.class);
+        if (rateLimiter != null) {
+            rateLimiter.blockAddress(address, time, unit);
+            return true;
+        }
+        return false;
     }
 
     @Override
