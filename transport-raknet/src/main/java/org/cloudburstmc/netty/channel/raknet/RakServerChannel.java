@@ -99,8 +99,7 @@ public class RakServerChannel extends ProxyChannel<DatagramChannel> implements S
     public boolean tryBlockAddress(InetAddress address, long time, TimeUnit unit) {
         RakServerRateLimiter rateLimiter = this.pipeline().get(RakServerRateLimiter.class);
         if (rateLimiter != null) {
-            rateLimiter.blockAddress(address, time, unit);
-            return true;
+            return rateLimiter.blockAddress(address, time, unit);
         }
         return false;
     }

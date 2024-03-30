@@ -25,8 +25,7 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 import org.cloudburstmc.netty.channel.raknet.RakServerChannel;
 
 import java.net.InetAddress;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -40,6 +39,8 @@ public class RakServerRateLimiter extends SimpleChannelInboundHandler<DatagramPa
 
     private final ConcurrentHashMap<InetAddress, AtomicInteger> rateLimitMap = new ConcurrentHashMap<>();
     private final Map<InetAddress, Long> blockedConnections = new ConcurrentHashMap<>();
+
+    private final Collection<InetAddress> exceptions = Collections.synchronizedCollection(new HashSet<>());
 
     private final AtomicLong globalCounter = new AtomicLong(0);
 
@@ -81,9 +82,14 @@ public class RakServerRateLimiter extends SimpleChannelInboundHandler<DatagramPa
         }
     }
 
-    public void blockAddress(InetAddress address, long time, TimeUnit unit) {
+    public boolean blockAddress(InetAddress address, long time, TimeUnit unit) {
+        if (this.exceptions.contains(address)) {
+            return false;
+        }
+
         long millis = unit.toMillis(time);
         this.blockedConnections.put(address, System.currentTimeMillis() + millis);
+        return true;
     }
 
     public void unblockAddress(InetAddress address) {
@@ -94,6 +100,14 @@ public class RakServerRateLimiter extends SimpleChannelInboundHandler<DatagramPa
 
     public boolean isAddressBlocked(InetAddress address) {
         return this.blockedConnections.containsKey(address);
+    }
+
+    public void addException(InetAddress address) {
+        this.exceptions.add(address);
+    }
+
+    public void removeException(InetAddress address) {
+        this.exceptions.remove(address);
     }
 
     @Override
@@ -111,8 +125,8 @@ public class RakServerRateLimiter extends SimpleChannelInboundHandler<DatagramPa
         }
 
         AtomicInteger counter = this.rateLimitMap.computeIfAbsent(address, a -> new AtomicInteger());
-        if (counter.incrementAndGet() > this.channel.config().getPacketLimit()) {
-            this.blockAddress(address, 10, TimeUnit.SECONDS);
+        if (counter.incrementAndGet() > this.channel.config().getPacketLimit() &&
+                this.blockAddress(address, 10, TimeUnit.SECONDS)) {
             log.warn("[{}] Blocked because packet limit was reached");
         } else {
             ctx.fireChannelRead(datagram.retain());
