@@ -37,14 +37,21 @@ import java.net.SocketAddress;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 public class RakServerChannel extends ProxyChannel<DatagramChannel> implements ServerChannel {
 
     private final RakServerChannelConfig config;
     private final Map<SocketAddress, RakChildChannel> childChannelMap = new ConcurrentHashMap<>();
+    private final Consumer<RakChannel> childConsumer;
 
     public RakServerChannel(DatagramChannel channel) {
+        this(channel, null);
+    }
+
+    public RakServerChannel(DatagramChannel channel, Consumer<RakChannel> childConsumer) {
         super(channel);
+        this.childConsumer = childConsumer;
         this.config = new DefaultRakServerConfig(this);
         // Default common handler of offline phase. Handles only raknet packets, forwards rest.
         this.pipeline().addLast(UnconnectedPongEncoder.NAME, UnconnectedPongEncoder.INSTANCE);
@@ -65,8 +72,7 @@ public class RakServerChannel extends ProxyChannel<DatagramChannel> implements S
             return null;
         }
 
-        RakChildChannel channel = new RakChildChannel(address, this, clientGuid, protocolVersion, mtu);
-
+        RakChildChannel channel = new RakChildChannel(address, this, clientGuid, protocolVersion, mtu, childConsumer);
         channel.closeFuture().addListener((GenericFutureListener<ChannelFuture>) this::onChildClosed);
         // Fire channel thought ServerBootstrap,
         // register to eventLoop, assign default options and attributes

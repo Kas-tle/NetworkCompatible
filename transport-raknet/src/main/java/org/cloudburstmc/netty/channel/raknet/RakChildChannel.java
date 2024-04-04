@@ -28,6 +28,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.NonWritableChannelException;
+import java.util.function.Consumer;
 
 public class RakChildChannel extends AbstractChannel implements RakChannel {
 
@@ -39,13 +40,18 @@ public class RakChildChannel extends AbstractChannel implements RakChannel {
     private volatile boolean open = true;
     private volatile boolean active;
 
-    public RakChildChannel(InetSocketAddress remoteAddress, RakServerChannel parent, long guid, int version, int mtu) {
+    RakChildChannel(InetSocketAddress remoteAddress, RakServerChannel parent, long guid, int version, int mtu, Consumer<RakChannel> childConsumer) {
         super(parent);
         this.remoteAddress = remoteAddress;
         this.config = new DefaultRakSessionConfig(this);
         this.config.setGuid(guid);
         this.config.setProtocolVersion(version);
         this.config.setMtu(mtu);
+        // Allow user to configure the child channel before we initialize pipeline
+        // This is not the same as bootstrap.childOption() as Bootstrap does not allow setting options per channel
+        if (childConsumer != null) {
+            childConsumer.accept(this);
+        }
         // Create an internal pipeline for RakNet session logic to take place. We use the parent channel to ensure
         // this all occurs on the parent event loop so the connection is not slowed down by any user code.
         // (compression, encryption, etc.)

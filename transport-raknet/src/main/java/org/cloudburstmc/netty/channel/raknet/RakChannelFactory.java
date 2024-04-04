@@ -25,45 +25,50 @@ import io.netty.util.internal.StringUtil;
 import java.lang.reflect.Constructor;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 public class RakChannelFactory<T extends Channel> implements ChannelFactory<T> {
 
-    private final Constructor<? extends T> constructor;
+    private final Class<T> channelClass;
+    private final Function<DatagramChannel, T> constructor;
     private final Constructor<? extends DatagramChannel> datagramConstructor;
     private final Consumer<DatagramChannel> parentConsumer;
 
-    private RakChannelFactory(Class<? extends T> clazz, Class<? extends DatagramChannel> datagramClass, Consumer<DatagramChannel> parentConsumer) {
-        Objects.requireNonNull(clazz, "clazz");
+    private RakChannelFactory(Class<T> channelClass, Function<DatagramChannel, T> constructor, Class<? extends DatagramChannel> datagramClass,
+                              Consumer<DatagramChannel> parentConsumer) {
+        Objects.requireNonNull(channelClass, "channelClass");
         Objects.requireNonNull(datagramClass, "datagramClass");
-        try {
-            this.constructor = clazz.getConstructor(DatagramChannel.class);
-        } catch (NoSuchMethodException e) {
-            throw new IllegalArgumentException("Proxy class " + StringUtil.simpleClassName(clazz) +
-                    " does not have a public non-arg constructor", e);
-        }
+        Objects.requireNonNull(constructor, "constructor");
+        this.channelClass = channelClass;
+        this.constructor = constructor;
+
         try {
             this.datagramConstructor = datagramClass.getConstructor();
         } catch (NoSuchMethodException e) {
-            throw new IllegalArgumentException("Class " + StringUtil.simpleClassName(clazz) +
+            throw new IllegalArgumentException("Class " + StringUtil.simpleClassName(datagramClass) +
                     " does not have a public non-arg constructor", e);
         }
         this.parentConsumer = parentConsumer;
     }
 
     public static RakChannelFactory<RakServerChannel> server(Class<? extends DatagramChannel> clazz) {
-        return new RakChannelFactory<>(RakServerChannel.class, clazz, null);
+        return new RakChannelFactory<>(RakServerChannel.class, RakServerChannel::new, clazz, null);
     }
 
     public static RakChannelFactory<RakServerChannel> server(Class<? extends DatagramChannel> clazz, Consumer<DatagramChannel> parentConsumer) {
-        return new RakChannelFactory<>(RakServerChannel.class, clazz, parentConsumer);
+        return new RakChannelFactory<>(RakServerChannel.class, RakServerChannel::new, clazz, parentConsumer);
+    }
+
+    public static RakChannelFactory<RakServerChannel> server(Class<? extends DatagramChannel> clazz, Consumer<DatagramChannel> parentConsumer, Consumer<RakChannel> childConsumer) {
+        return new RakChannelFactory<>(RakServerChannel.class, ch -> new RakServerChannel(ch, childConsumer), clazz, parentConsumer);
     }
 
     public static RakChannelFactory<RakClientChannel> client(Class<? extends DatagramChannel> clazz) {
-        return new RakChannelFactory<>(RakClientChannel.class, clazz, null);
+        return new RakChannelFactory<>(RakClientChannel.class, RakClientChannel::new, clazz, null);
     }
 
     public static RakChannelFactory<RakClientChannel> client(Class<? extends DatagramChannel> clazz, Consumer<DatagramChannel> parentConsumer) {
-        return new RakChannelFactory<>(RakClientChannel.class, clazz, parentConsumer);
+        return new RakChannelFactory<>(RakClientChannel.class, RakClientChannel::new, clazz, parentConsumer);
     }
 
     @Override
@@ -73,16 +78,16 @@ public class RakChannelFactory<T extends Channel> implements ChannelFactory<T> {
             if (this.parentConsumer != null) {
                 this.parentConsumer.accept(channel);
             }
-            return constructor.newInstance(channel);
+            return constructor.apply(channel);
         } catch (Throwable t) {
-            throw new ChannelException("Unable to create Channel from class " + constructor.getDeclaringClass(), t);
+            throw new ChannelException("Unable to create Channel from class " + this.channelClass, t);
         }
     }
 
     @Override
     public String toString() {
         return StringUtil.simpleClassName(RakChannelFactory.class) +
-                '(' + StringUtil.simpleClassName(constructor.getDeclaringClass()) + ".class, " +
+                '(' + StringUtil.simpleClassName(this.channelClass) + ".class, " +
                 StringUtil.simpleClassName(datagramConstructor.getDeclaringClass()) + ".class)";
     }
 }
