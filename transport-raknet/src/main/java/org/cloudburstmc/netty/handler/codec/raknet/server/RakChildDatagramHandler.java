@@ -20,7 +20,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.channel.socket.DatagramPacket;
 import org.cloudburstmc.netty.channel.raknet.RakChildChannel;
-import org.cloudburstmc.netty.channel.raknet.config.RakMetrics;
+import org.cloudburstmc.netty.channel.raknet.config.RakChannelMetrics;
 
 import java.nio.channels.ClosedChannelException;
 
@@ -46,7 +46,7 @@ public class RakChildDatagramHandler extends ChannelOutboundHandlerAdapter {
         promise.trySuccess();
         DatagramPacket datagram = isDatagram ? (DatagramPacket) msg : new DatagramPacket((ByteBuf) msg, this.channel.remoteAddress());
 
-        RakMetrics metrics = this.channel.config().getMetrics();
+        RakChannelMetrics metrics = this.channel.config().getMetrics();
         if (metrics != null) {
             metrics.bytesOut(datagram.content().readableBytes());
         }

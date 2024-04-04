@@ -18,7 +18,6 @@ package org.cloudburstmc.netty.channel.raknet.config;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelOption;
-import org.cloudburstmc.netty.handler.codec.raknet.common.RakSessionCodec;
 
 public class RakChannelOption<T> extends ChannelOption<T> {
 
@@ -99,8 +98,14 @@ public class RakChannelOption<T> extends ChannelOption<T> {
     /**
      * RakMetrics instance used for session
      */
-    public static final ChannelOption<RakMetrics> RAK_METRICS =
+    public static final ChannelOption<RakChannelMetrics> RAK_METRICS =
             valueOf(RakChannelOption.class, "RAK_METRICS");
+
+    /**
+     * RakMetrics instance used for server
+     */
+    public static final ChannelOption<RakServerMetrics> RAK_SERVER_METRICS =
+            valueOf(RakChannelOption.class, "RAK_SERVER_METRICS");
 
     /**
      * The advertisement sent to clients pinging a server.
@@ -139,14 +144,6 @@ public class RakChannelOption<T> extends ChannelOption<T> {
      */
     public static final ChannelOption<Integer> RAK_PACKET_LIMIT =
             valueOf(RakChannelOption.class, "RAK_PACKET_LIMIT");
-
-    /**
-     * A number of "unconnected" datagram packets each address can send within one second.
-     * This includes packets such as UNCONNECTED_PING and OPEN_CONNECTION_REQUEST packets.
-     * Default is 10 packets.
-     */
-    public static final ChannelOption<Integer> RAK_OFFLINE_PACKET_LIMIT =
-            valueOf(RakChannelOption.class, "RAK_OFFLINE_PACKET_LIMIT");
 
     /**
      * A number of all datagrams that will be handled within one RakNet tick before server starts dropping any incoming data.

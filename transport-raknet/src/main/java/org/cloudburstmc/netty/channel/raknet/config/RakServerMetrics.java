@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 CloudburstMC
+ * Copyright 2024 CloudburstMC
  *
  * CloudburstMC licenses this file to you under the Apache License,
  * version 2.0 (the "License"); you may not use this file except in compliance
@@ -16,32 +16,26 @@
 
 package org.cloudburstmc.netty.channel.raknet.config;
 
-public interface RakMetrics {
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 
-    default void bytesIn(int count) {
+public interface RakServerMetrics {
+
+    default void channelOpen(InetSocketAddress address) {
     }
 
-    default void bytesOut(int count) {
+    default void channelClose(InetSocketAddress address) {
     }
 
-    default void rakDatagramsIn(int count) {
+    default void unconnectedPing(InetSocketAddress address) {
     }
 
-    default void rakDatagramsOut(int count) {
+    default void connectionInitPacket(InetSocketAddress address, int packetId) {
     }
 
-    default void rakStaleDatagrams(int count) {
+    default void addressBlocked(InetAddress address) {
     }
 
-    default void ackIn(int count) {
-    }
-
-    default void ackOut(int count) {
-    }
-
-    default void nackIn(int count) {
-    }
-
-    default void nackOut(int count) {
+    default void addressUnblocked(InetAddress address) {
     }
 }

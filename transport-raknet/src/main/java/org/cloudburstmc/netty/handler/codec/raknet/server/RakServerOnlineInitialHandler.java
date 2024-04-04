@@ -26,7 +26,9 @@ import org.cloudburstmc.netty.channel.raknet.RakChildChannel;
 import org.cloudburstmc.netty.channel.raknet.RakDisconnectReason;
 import org.cloudburstmc.netty.channel.raknet.RakPriority;
 import org.cloudburstmc.netty.channel.raknet.RakReliability;
+import org.cloudburstmc.netty.channel.raknet.config.RakChannelOption;
 import org.cloudburstmc.netty.channel.raknet.config.RakServerChannelConfig;
+import org.cloudburstmc.netty.channel.raknet.config.RakServerMetrics;
 import org.cloudburstmc.netty.channel.raknet.packet.EncapsulatedPacket;
 import org.cloudburstmc.netty.channel.raknet.packet.RakMessage;
 import org.cloudburstmc.netty.handler.codec.raknet.common.RakSessionCodec;
@@ -34,7 +36,6 @@ import org.cloudburstmc.netty.util.RakUtils;
 
 import java.net.Inet6Address;
 import java.net.InetSocketAddress;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.cloudburstmc.netty.channel.raknet.RakConstants.*;
 
@@ -44,7 +45,6 @@ public class RakServerOnlineInitialHandler extends SimpleChannelInboundHandler<E
     private static final InternalLogger log = InternalLoggerFactory.getInstance(RakServerOnlineInitialHandler.class);
 
     private final RakChildChannel channel;
-    private final AtomicInteger retriesCounter = new AtomicInteger(5);
 
     public RakServerOnlineInitialHandler(RakChildChannel channel) {
         this.channel = channel;
@@ -55,11 +55,16 @@ public class RakServerOnlineInitialHandler extends SimpleChannelInboundHandler<E
         ByteBuf buf = message.getBuffer();
         int packetId = buf.getUnsignedByte(buf.readerIndex());
 
+        RakServerMetrics metrics = this.channel.parent().config().getOption(RakChannelOption.RAK_SERVER_METRICS);
+
         switch (packetId) {
             case ID_CONNECTION_REQUEST:
+                if (metrics != null) metrics.connectionInitPacket(this.channel.remoteAddress(), ID_CONNECTION_REQUEST);
                 this.onConnectionRequest(ctx, buf);
                 break;
             case ID_NEW_INCOMING_CONNECTION:
+                if (metrics != null) metrics.connectionInitPacket(this.channel.remoteAddress(), ID_NEW_INCOMING_CONNECTION);
+
                 buf.skipBytes(1);
                 // We have connected and no longer need this handler
                 ctx.pipeline().remove(this);
@@ -81,10 +86,7 @@ public class RakServerOnlineInitialHandler extends SimpleChannelInboundHandler<E
         long timestamp = buffer.readLong();
         boolean security = buffer.readBoolean();
 
-        if (this.retriesCounter.decrementAndGet() < 0) {
-            this.sendConnectionRequestFailed(ctx, guid);
-            log.warn("[{}] Connection request failed due to too many retries", this.channel.remoteAddress());
-        } else if (serverGuid != guid || security) {
+        if (serverGuid != guid || security) {
             this.sendConnectionRequestFailed(ctx, guid);
         } else {
             this.sendConnectionRequestAccepted(ctx, timestamp);

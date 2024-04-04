@@ -23,6 +23,7 @@ import io.netty.util.concurrent.ScheduledFuture;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 import org.cloudburstmc.netty.channel.raknet.RakServerChannel;
+import org.cloudburstmc.netty.channel.raknet.config.RakServerMetrics;
 
 import java.net.InetAddress;
 import java.util.*;
@@ -40,7 +41,7 @@ public class RakServerRateLimiter extends SimpleChannelInboundHandler<DatagramPa
     private final ConcurrentHashMap<InetAddress, AtomicInteger> rateLimitMap = new ConcurrentHashMap<>();
     private final Map<InetAddress, Long> blockedConnections = new ConcurrentHashMap<>();
 
-    private final Collection<InetAddress> exceptions = Collections.synchronizedCollection(new HashSet<>());
+    private final Collection<InetAddress> exceptions = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     private final AtomicLong globalCounter = new AtomicLong(0);
 
@@ -72,12 +73,17 @@ public class RakServerRateLimiter extends SimpleChannelInboundHandler<DatagramPa
     private void onBlockedTick() {
         long currTime = System.currentTimeMillis();
 
+        RakServerMetrics metrics = this.channel.config().getMetrics();
+
         Iterator<Map.Entry<InetAddress, Long>> iterator = this.blockedConnections.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<InetAddress, Long> entry = iterator.next();
             if (entry.getValue() != 0 && currTime > entry.getValue()) {
                 iterator.remove();
                 log.info("Unblocked address {}", entry.getKey());
+                if (metrics != null) {
+                    metrics.addressUnblocked(entry.getKey());
+                }
             }
         }
     }
@@ -89,12 +95,22 @@ public class RakServerRateLimiter extends SimpleChannelInboundHandler<DatagramPa
 
         long millis = unit.toMillis(time);
         this.blockedConnections.put(address, System.currentTimeMillis() + millis);
+
+        if (this.channel.config().getMetrics() != null) {
+            this.channel.config().getMetrics().addressBlocked(address);
+        }
         return true;
     }
 
     public void unblockAddress(InetAddress address) {
-        if (this.blockedConnections.remove(address) != null) {
-            log.info("Unblocked address {}", address);
+        if (this.blockedConnections.remove(address) == null) {
+            return;
+        }
+
+        log.info("Unblocked address {}", address);
+
+        if (this.channel.config().getMetrics() != null) {
+            this.channel.config().getMetrics().addressBlocked(address);
         }
     }
 
@@ -127,7 +143,7 @@ public class RakServerRateLimiter extends SimpleChannelInboundHandler<DatagramPa
         AtomicInteger counter = this.rateLimitMap.computeIfAbsent(address, a -> new AtomicInteger());
         if (counter.incrementAndGet() > this.channel.config().getPacketLimit() &&
                 this.blockAddress(address, 10, TimeUnit.SECONDS)) {
-            log.warn("[{}] Blocked because packet limit was reached");
+            log.warn("[{}] Blocked because packet limit was reached", address);
         } else {
             ctx.fireChannelRead(datagram.retain());
         }

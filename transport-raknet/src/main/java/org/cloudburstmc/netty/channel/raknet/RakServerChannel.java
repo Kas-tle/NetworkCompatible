@@ -72,6 +72,10 @@ public class RakServerChannel extends ProxyChannel<DatagramChannel> implements S
         // register to eventLoop, assign default options and attributes
         this.pipeline().fireChannelRead(channel).fireChannelReadComplete();
         this.childChannelMap.put(address, channel);
+
+        if (this.config().getMetrics() != null) {
+            this.config().getMetrics().channelOpen(address);
+        }
         return channel;
     }
 
@@ -84,6 +88,10 @@ public class RakServerChannel extends ProxyChannel<DatagramChannel> implements S
         channel.rakPipeline().fireChannelInactive();
         channel.rakPipeline().fireChannelUnregistered();
         this.childChannelMap.remove(channel.remoteAddress());
+
+        if (this.config().getMetrics() != null) {
+            this.config().getMetrics().channelClose(channel.remoteAddress());
+        }
     }
 
     @Override

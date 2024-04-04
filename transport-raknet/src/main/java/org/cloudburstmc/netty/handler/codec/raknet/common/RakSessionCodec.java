@@ -27,7 +27,7 @@ import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 import org.cloudburstmc.netty.channel.raknet.*;
 import org.cloudburstmc.netty.channel.raknet.config.RakChannelOption;
-import org.cloudburstmc.netty.channel.raknet.config.RakMetrics;
+import org.cloudburstmc.netty.channel.raknet.config.RakChannelMetrics;
 import org.cloudburstmc.netty.channel.raknet.packet.EncapsulatedPacket;
 import org.cloudburstmc.netty.channel.raknet.packet.RakDatagramPacket;
 import org.cloudburstmc.netty.channel.raknet.packet.RakMessage;
@@ -48,7 +48,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
     private final RakChannel channel;
     private ScheduledFuture<?> tickFuture;
 
-    private volatile RakState state = RakState.UNCONNECTED;
+    private volatile RakState state;
 
     private volatile long lastTouched = System.currentTimeMillis();
     private volatile long lastFlush;
@@ -81,11 +81,12 @@ public class RakSessionCodec extends ChannelDuplexHandler {
 
     public RakSessionCodec(RakChannel channel) {
         this.channel = channel;
+        this.setState(RakState.UNCONNECTED);
     }
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
-        this.state = RakState.CONNECTED;
+        this.setState(RakState.CONNECTED);
         int mtu = this.getMtu();
 
         this.slidingWindow = new RakSlidingWindow(mtu);
@@ -126,11 +127,11 @@ public class RakSessionCodec extends ChannelDuplexHandler {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         super.channelInactive(ctx);
-        if (this.state == RakState.UNCONNECTED && this.tickFuture == null) {
+        if (this.state == RakState.DISCONNECTED && this.tickFuture == null) {
             // Already deinitialized
             return;
         }
-        this.state = RakState.UNCONNECTED;
+        this.setState(RakState.DISCONNECTED);
         this.tickFuture.cancel(false);
         this.tickFuture = null;
 
@@ -257,7 +258,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
 
     private void handleDatagram(ChannelHandlerContext ctx, RakDatagramPacket packet) {
         this.touch();
-        RakMetrics metrics = this.getMetrics();
+        RakChannelMetrics metrics = this.getMetrics();
         if (metrics != null) {
             metrics.rakDatagramsIn(1);
         }
@@ -464,7 +465,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
         // Finally flush channel
         ctx.flush();
 
-        RakMetrics metrics = this.getMetrics();
+        RakChannelMetrics metrics = this.getMetrics();
         if (metrics != null) {
             metrics.nackOut(writtenNacks);
             metrics.ackOut(writtenAcks);
@@ -609,7 +610,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
             throw new IllegalArgumentException("RakNetDatagram with no packets");
         }
 
-        RakMetrics metrics = this.getMetrics();
+        RakChannelMetrics metrics = this.getMetrics();
         if (metrics != null) {
             metrics.rakDatagramsOut(1);
         }
@@ -744,7 +745,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
         if (this.state == RakState.UNCONNECTED || this.state == RakState.DISCONNECTING) {
             return this.channel.voidPromise();
         }
-        this.state = RakState.DISCONNECTING;
+        this.setState(RakState.DISCONNECTING);
 
         if (log.isDebugEnabled()) {
             log.debug("Disconnecting RakNet Session ({} => {}) due to {}", this.channel.localAddress(), this.getRemoteAddress(), reason);
@@ -767,7 +768,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
         if (this.state == RakState.DISCONNECTING) {
             return;
         }
-        this.state = RakState.DISCONNECTING;
+        this.setState(RakState.DISCONNECTING);
 
         if (log.isDebugEnabled()) {
             log.debug("Closing RakNet Session ({} => {}) due to {}", this.channel.localAddress(), this.getRemoteAddress(), reason);
@@ -783,6 +784,18 @@ public class RakSessionCodec extends ChannelDuplexHandler {
     private void checkForClosed() {
         if (this.state == RakState.UNCONNECTED) {
             throw new IllegalStateException("RakSession is closed!");
+        }
+    }
+
+    private void setState(RakState state) {
+        if (this.state == state) {
+            return;
+        }
+        this.state = state;
+
+        RakChannelMetrics metrics = this.getMetrics();
+        if (metrics != null) {
+            metrics.stateChange(state);
         }
     }
 
@@ -823,11 +836,11 @@ public class RakSessionCodec extends ChannelDuplexHandler {
     }
 
     public int getMtu() {
-        return this.channel.config().getOption(RakChannelOption.RAK_MTU) - UDP_HEADER_SIZE - (this.getRemoteAddress().getAddress() instanceof Inet6Address ? 40 : 20);
+        return this.channel.config().getMtu() - UDP_HEADER_SIZE - (this.getRemoteAddress().getAddress() instanceof Inet6Address ? 40 : 20);
     }
 
-    public RakMetrics getMetrics() {
-        return this.channel.config().getOption(RakChannelOption.RAK_METRICS);
+    public RakChannelMetrics getMetrics() {
+        return this.channel.config().getMetrics();
     }
 
     public InetSocketAddress getRemoteAddress() {

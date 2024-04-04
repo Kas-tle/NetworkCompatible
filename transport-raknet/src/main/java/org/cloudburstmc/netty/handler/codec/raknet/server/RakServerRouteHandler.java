@@ -22,7 +22,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.DatagramPacket;
 import org.cloudburstmc.netty.channel.raknet.RakChildChannel;
 import org.cloudburstmc.netty.channel.raknet.RakServerChannel;
-import org.cloudburstmc.netty.channel.raknet.config.RakMetrics;
+import org.cloudburstmc.netty.channel.raknet.config.RakChannelMetrics;
 
 public class RakServerRouteHandler extends ChannelDuplexHandler {
 
@@ -49,7 +49,7 @@ public class RakServerRouteHandler extends ChannelDuplexHandler {
                 return;
             }
 
-            RakMetrics metrics = channel.config().getMetrics();
+            RakChannelMetrics metrics = channel.config().getMetrics();
             if (metrics != null) {
                 metrics.bytesIn(packet.content().readableBytes());
             }

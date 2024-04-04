@@ -36,9 +36,9 @@ public interface RakChannelConfig extends ChannelConfig {
 
     RakChannelConfig setOrderingChannels(int orderingChannels);
 
-    RakMetrics getMetrics();
+    RakChannelMetrics getMetrics();
 
-    RakChannelConfig setMetrics(RakMetrics metrics);
+    RakChannelConfig setMetrics(RakChannelMetrics metrics);
 
     long getSessionTimeout();
 

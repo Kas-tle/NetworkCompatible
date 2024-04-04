@@ -65,7 +65,7 @@ public interface RakServerChannelConfig extends ChannelConfig {
 
     void setGlobalPacketLimit(int limit);
 
-    int getUnconnectedPacketLimit();
+    void setMetrics(RakServerMetrics metrics);
 
-    void setUnconnectedPacketLimit(int limit);
+    RakServerMetrics getMetrics();
 }

@@ -19,7 +19,6 @@ package org.cloudburstmc.netty.channel.raknet.config;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultChannelConfig;
-import org.cloudburstmc.netty.channel.raknet.RakConstants;
 
 import java.util.Map;
 
@@ -35,7 +34,7 @@ public class DefaultRakSessionConfig extends DefaultChannelConfig implements Rak
     private volatile int mtu = MAXIMUM_MTU_SIZE;
     private volatile int protocolVersion;
     private volatile int orderingChannels = 16;
-    private volatile RakMetrics metrics;
+    private volatile RakChannelMetrics metrics;
     private volatile long sessionTimeout = SESSION_TIMEOUT_MS;
     private volatile boolean autoFlush = true;
     private volatile int flushInterval = 10;
@@ -95,7 +94,7 @@ public class DefaultRakSessionConfig extends DefaultChannelConfig implements Rak
         } else if (option == RakChannelOption.RAK_ORDERING_CHANNELS) {
             this.setOrderingChannels((Integer) value);
         } else if (option == RakChannelOption.RAK_METRICS) {
-            this.setMetrics((RakMetrics) value);
+            this.setMetrics((RakChannelMetrics) value);
         } else if (option == RakChannelOption.RAK_SESSION_TIMEOUT) {
             this.setSessionTimeout((Long) value);
             return true;
@@ -155,12 +154,12 @@ public class DefaultRakSessionConfig extends DefaultChannelConfig implements Rak
     }
 
     @Override
-    public RakMetrics getMetrics() {
+    public RakChannelMetrics getMetrics() {
         return this.metrics;
     }
 
     @Override
-    public RakChannelConfig setMetrics(RakMetrics metrics) {
+    public RakChannelConfig setMetrics(RakChannelMetrics metrics) {
         this.metrics = metrics;
         return this;
     }

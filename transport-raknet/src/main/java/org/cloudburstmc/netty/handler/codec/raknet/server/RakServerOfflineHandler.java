@@ -30,15 +30,14 @@ import org.cloudburstmc.netty.channel.raknet.RakConstants;
 import org.cloudburstmc.netty.channel.raknet.RakPing;
 import org.cloudburstmc.netty.channel.raknet.RakServerChannel;
 import org.cloudburstmc.netty.channel.raknet.config.RakChannelOption;
+import org.cloudburstmc.netty.channel.raknet.config.RakServerMetrics;
 import org.cloudburstmc.netty.handler.codec.raknet.AdvancedChannelInboundHandler;
 import org.cloudburstmc.netty.util.RakUtils;
 
 import java.net.Inet6Address;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.cloudburstmc.netty.channel.raknet.RakConstants.*;
 
@@ -51,11 +50,6 @@ public class RakServerOfflineHandler extends AdvancedChannelInboundHandler<Datag
             .expiration(10, TimeUnit.SECONDS)
             .expirationPolicy(ExpirationPolicy.CREATED)
             .expirationListener((key, value) -> ReferenceCountUtil.release(value))
-            .build();
-
-    private final ExpiringMap<InetAddress, AtomicInteger> packetsCounter = ExpiringMap.builder()
-            .expiration(1, TimeUnit.SECONDS)
-            .expirationPolicy(ExpirationPolicy.CREATED)
             .build();
 
     private final RakServerChannel channel;
@@ -104,21 +98,19 @@ public class RakServerOfflineHandler extends AdvancedChannelInboundHandler<Datag
         ByteBuf magicBuf = ctx.channel().config().getOption(RakChannelOption.RAK_UNCONNECTED_MAGIC);
         long guid = ctx.channel().config().getOption(RakChannelOption.RAK_GUID);
 
-        AtomicInteger counter = this.packetsCounter.computeIfAbsent(packet.sender().getAddress(), s -> new AtomicInteger());
-        if (counter.incrementAndGet() > this.channel.config().getUnconnectedPacketLimit()) {
-            log.warn("[{}] Sent too many packets per second", packet.sender());
-            this.channel.tryBlockAddress(packet.sender().getAddress(), 10, TimeUnit.SECONDS);
-            return;
-        }
+        RakServerMetrics metrics = this.channel.config().getMetrics();
 
         switch (packetId) {
             case ID_UNCONNECTED_PING:
+                if (metrics != null) metrics.unconnectedPing(packet.sender());
                 this.onUnconnectedPing(ctx, packet, magicBuf, guid);
                 break;
             case ID_OPEN_CONNECTION_REQUEST_1:
+                if (metrics != null) metrics.connectionInitPacket(packet.sender(), ID_OPEN_CONNECTION_REQUEST_1);
                 this.onOpenConnectionRequest1(ctx, packet, magicBuf, guid);
                 break;
             case ID_OPEN_CONNECTION_REQUEST_2:
+                if (metrics != null) metrics.connectionInitPacket(packet.sender(), ID_OPEN_CONNECTION_REQUEST_2);
                 this.onOpenConnectionRequest2(ctx, packet, magicBuf, guid);
                 break;
         }
