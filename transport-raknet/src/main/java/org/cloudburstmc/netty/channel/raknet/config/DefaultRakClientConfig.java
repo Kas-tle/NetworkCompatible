@@ -42,7 +42,7 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
 
     @Override
     public Map<ChannelOption<?>, Object> getOptions() {
-        return this.getOptions(super.getOptions(), RakChannelOption.RAK_UNCONNECTED_MAGIC);
+        return this.getOptions(super.getOptions(), RakChannelOption.RAK_UNCONNECTED_MAGIC, RakChannelOption.RAK_CONNECT_TIMEOUT, RakChannelOption.RAK_REMOTE_GUID, RakChannelOption.RAK_SESSION_TIMEOUT);
     }
 
     @SuppressWarnings("unchecked")

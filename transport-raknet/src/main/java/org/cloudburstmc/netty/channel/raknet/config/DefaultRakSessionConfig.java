@@ -47,8 +47,8 @@ public class DefaultRakSessionConfig extends DefaultChannelConfig implements Rak
     public Map<ChannelOption<?>, Object> getOptions() {
         return this.getOptions(
                 super.getOptions(),
-                RakChannelOption.RAK_GUID, RakChannelOption.RAK_MAX_CHANNELS, RakChannelOption.RAK_MTU,
-                RakChannelOption.RAK_PROTOCOL_VERSION);
+                RakChannelOption.RAK_GUID, RakChannelOption.RAK_MAX_CHANNELS, RakChannelOption.RAK_MTU, RakChannelOption.RAK_PROTOCOL_VERSION, RakChannelOption.RAK_ORDERING_CHANNELS,
+                RakChannelOption.RAK_METRICS, RakChannelOption.RAK_SESSION_TIMEOUT, RakChannelOption.RAK_AUTO_FLUSH, RakChannelOption.RAK_FLUSH_INTERVAL);
     }
 
     @SuppressWarnings("unchecked")
