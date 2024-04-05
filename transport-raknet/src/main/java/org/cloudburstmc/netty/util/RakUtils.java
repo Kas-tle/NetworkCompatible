@@ -77,33 +77,29 @@ public class RakUtils {
         return new InetSocketAddress(address, port);
     }
 
-    public static InetSocketAddress readCompatibleAddress(ByteBuf buffer) {
+    public static boolean readCompatibleAddress(ByteBuf buffer) {
         short type = buffer.readByte();
-        InetAddress address;
-        int port;
         try {
             if (type == 4) {
                 byte[] addressBytes = new byte[4];
                 buffer.readBytes(addressBytes);
                 flip(addressBytes);
-                address = Inet4Address.getByAddress(addressBytes);
-                port = buffer.readUnsignedShort();
-            } else {
+                buffer.readUnsignedShort();
+            } else if (type == 6) {
                 // Vanilla client assumes type 6 if type is not 4
                 buffer.readShortLE(); // Family, AF_INET6
-                port = buffer.readUnsignedShort();
+                buffer.readUnsignedShort();
                 buffer.readInt(); // Flow information
                 byte[] addressBytes = new byte[16];
                 buffer.readBytes(addressBytes);
-                int scopeId = buffer.readInt();
-                address = Inet6Address.getByAddress(null, addressBytes, scopeId);
+                buffer.readInt();
+            } else {
+                return false;
             }
-        } catch (UnknownHostException | IndexOutOfBoundsException e) {
-            return type == 4 ? 
-                new InetSocketAddress(Inet4Address.getLoopbackAddress(), 0) : 
-                new InetSocketAddress(Inet6Address.getLoopbackAddress(), 0);
+        } catch (IndexOutOfBoundsException e) {
+            return false;
         }
-        return new InetSocketAddress(address, port);
+        return true;
     }
 
     public static void writeAddress(ByteBuf buffer, InetSocketAddress address) {
