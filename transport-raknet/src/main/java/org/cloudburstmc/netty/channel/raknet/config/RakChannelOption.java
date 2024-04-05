@@ -152,6 +152,12 @@ public class RakChannelOption<T> extends ChannelOption<T> {
     public static final ChannelOption<Integer> RAK_GLOBAL_PACKET_LIMIT =
             valueOf(RakChannelOption.class, "RAK_GLOBAL_PACKET_LIMIT");
 
+    /**
+     * Whether the client should be run in compatibility mode for closer behavior to the vanilla client RakNet implementation.
+     */
+    public static final ChannelOption<Boolean> RAK_COMPATIBILITY_MODE =
+            valueOf(RakChannelOption.class, "RAK_COMPATIBILITY_MODE");
+
     @SuppressWarnings("deprecation")
     protected RakChannelOption() {
         super(null);

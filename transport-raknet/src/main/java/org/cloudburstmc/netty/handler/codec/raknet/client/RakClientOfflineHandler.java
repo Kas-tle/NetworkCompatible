@@ -168,7 +168,11 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
 
     private void onOpenConnectionReply2(ChannelHandlerContext ctx, ByteBuf buffer) {
         buffer.readLong(); // serverGuid
-        RakUtils.readAddress(buffer); // serverAddress
+        if (this.rakChannel.config().getOption(RakChannelOption.RAK_COMPATIBILITY_MODE)) {
+            RakUtils.readCompatibleAddress(buffer); // serverAddress
+        } else {
+            RakUtils.readAddress(buffer); // serverAddress
+        }
         int mtu = buffer.readShort();
         buffer.readBoolean(); // security
 
