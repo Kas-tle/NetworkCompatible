@@ -48,6 +48,7 @@ public class RakUnhandledMessagesQueue extends SimpleChannelInboundHandler<Encap
     public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
         if (this.future != null) {
             this.future.cancel(false);
+            this.future = null;
         }
 
         EncapsulatedPacket message;

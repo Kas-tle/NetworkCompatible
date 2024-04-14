@@ -30,6 +30,7 @@ import org.cloudburstmc.netty.handler.codec.raknet.server.RakServerOfflineHandle
 import org.cloudburstmc.netty.handler.codec.raknet.server.RakServerRateLimiter;
 import org.cloudburstmc.netty.handler.codec.raknet.server.RakServerRouteHandler;
 import org.cloudburstmc.netty.handler.codec.raknet.server.RakServerTailHandler;
+import org.cloudburstmc.netty.util.RakUtils;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -91,13 +92,18 @@ public class RakServerChannel extends ProxyChannel<DatagramChannel> implements S
 
     private void onChildClosed(ChannelFuture channelFuture) {
         RakChildChannel channel = (RakChildChannel) channelFuture.channel();
-        channel.rakPipeline().fireChannelInactive();
-        channel.rakPipeline().fireChannelUnregistered();
         this.childChannelMap.remove(channel.remoteAddress());
 
         if (this.config().getMetrics() != null) {
             this.config().getMetrics().channelClose(channel.remoteAddress());
         }
+
+        channel.rakPipeline().fireChannelInactive();
+        channel.rakPipeline().fireChannelUnregistered();
+        // Need to use reflection to destroy pipeline because
+        // DefaultChannelPipeline.destroy() is only called when channel.isOpen() is false,
+        // but the method is called on parent channel, and there is no other way to destroy pipeline.
+        RakUtils.destroyChannelPipeline(channel.rakPipeline());
     }
 
     @Override
