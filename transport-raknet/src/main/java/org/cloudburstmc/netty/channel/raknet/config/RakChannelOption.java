@@ -152,6 +152,12 @@ public class RakChannelOption<T> extends ChannelOption<T> {
     public static final ChannelOption<Integer> RAK_GLOBAL_PACKET_LIMIT =
             valueOf(RakChannelOption.class, "RAK_GLOBAL_PACKET_LIMIT");
 
+    /**
+     * Whether to send a cookie to the client during the connection process.
+     */
+    public static final ChannelOption<Boolean> RAK_SEND_COOKIE =
+            valueOf(RakChannelOption.class, "RAK_SEND_COOKIE");
+
     @SuppressWarnings("deprecation")
     protected RakChannelOption() {
         super(null);

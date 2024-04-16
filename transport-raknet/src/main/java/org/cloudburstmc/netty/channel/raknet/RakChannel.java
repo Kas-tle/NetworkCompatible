@@ -17,7 +17,6 @@
 package org.cloudburstmc.netty.channel.raknet;
 
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelPipeline;
 import org.cloudburstmc.netty.channel.raknet.config.RakChannelConfig;
 

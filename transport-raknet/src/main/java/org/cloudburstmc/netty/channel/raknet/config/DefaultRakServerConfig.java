@@ -46,6 +46,7 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
     private volatile int packetLimit = RakConstants.DEFAULT_PACKET_LIMIT;
     private volatile int globalPacketLimit = RakConstants.DEFAULT_GLOBAL_PACKET_LIMIT;
     private volatile RakServerMetrics metrics;
+    private volatile boolean sendCookie;
 
     public DefaultRakServerConfig(RakServerChannel channel) {
         super(channel);
@@ -56,7 +57,8 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
         return getOptions(
                 super.getOptions(),
                 RakChannelOption.RAK_GUID, RakChannelOption.RAK_MAX_CHANNELS, RakChannelOption.RAK_MAX_CONNECTIONS, RakChannelOption.RAK_SUPPORTED_PROTOCOLS, RakChannelOption.RAK_UNCONNECTED_MAGIC,
-                RakChannelOption.RAK_ADVERTISEMENT, RakChannelOption.RAK_HANDLE_PING, RakChannelOption.RAK_PACKET_LIMIT, RakChannelOption.RAK_GLOBAL_PACKET_LIMIT, RakChannelOption.RAK_SERVER_METRICS);
+                RakChannelOption.RAK_ADVERTISEMENT, RakChannelOption.RAK_HANDLE_PING, RakChannelOption.RAK_PACKET_LIMIT, RakChannelOption.RAK_GLOBAL_PACKET_LIMIT, RakChannelOption.RAK_SEND_COOKIE,
+                RakChannelOption.RAK_SERVER_METRICS);
     }
 
     @SuppressWarnings("unchecked")
@@ -98,6 +100,9 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
         if (option == RakChannelOption.RAK_SERVER_METRICS) {
             return (T) this.getMetrics();
         }
+        if (option == RakChannelOption.RAK_SEND_COOKIE) {
+            return (T) Boolean.valueOf(this.sendCookie);
+        }
         return this.channel.parent().config().getOption(option);
     }
 
@@ -127,6 +132,8 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
             this.setPacketLimit((Integer) value);
         } else if (option == RakChannelOption.RAK_GLOBAL_PACKET_LIMIT) {
             this.setGlobalPacketLimit((Integer) value);
+        } else if (option == RakChannelOption.RAK_SEND_COOKIE) {
+            this.sendCookie = (Boolean) value;
         } else if (option == RakChannelOption.RAK_SERVER_METRICS) {
             this.setMetrics((RakServerMetrics) value);
         } else{
@@ -263,6 +270,16 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
     @Override
     public void setGlobalPacketLimit(int globalPacketLimit) {
         this.globalPacketLimit = globalPacketLimit;
+    }
+
+    @Override
+    public void setSendCookie(boolean sendCookie) {
+        this.sendCookie = sendCookie;
+    }
+
+    @Override
+    public boolean getSendCookie() {
+        return this.sendCookie;
     }
 
     @Override

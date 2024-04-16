@@ -27,7 +27,6 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import org.cloudburstmc.netty.channel.raknet.*;
 import org.cloudburstmc.netty.channel.raknet.config.RakChannelOption;
 import org.cloudburstmc.netty.channel.raknet.packet.RakMessage;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -100,7 +99,20 @@ public class RakTests {
                 .option(RakChannelOption.RAK_MAX_CONNECTIONS, 1)
                 .childOption(RakChannelOption.RAK_ORDERING_CHANNELS, 1)
                 .option(RakChannelOption.RAK_GUID, ThreadLocalRandom.current().nextLong())
-                .option(RakChannelOption.RAK_ADVERTISEMENT, Unpooled.wrappedBuffer(ADVERTISEMENT));
+                .option(RakChannelOption.RAK_ADVERTISEMENT, Unpooled.wrappedBuffer(ADVERTISEMENT))
+                .handler(new ChannelInitializer<RakServerChannel>() {
+                    @Override
+                    protected void initChannel(RakServerChannel ch) throws Exception {
+                        System.out.println("Initialised server channel");
+                    }
+                })
+                .childHandler(new ChannelInitializer<RakChildChannel>() {
+                    @Override
+                    protected void initChannel(RakChildChannel ch) throws Exception {
+                        System.out.println("Server child channel initialized " + ch.remoteAddress());
+                        ch.pipeline().addLast(RESEND_HANDLER());
+                    }
+                });
     }
 
     private static Bootstrap clientBootstrap(int mtu) {
@@ -117,32 +129,44 @@ public class RakTests {
                 .filter(i -> i % 12 == 0);
     }
 
-    @BeforeEach
     public void setupServer() {
         serverBootstrap()
-                .handler(new ChannelInitializer<RakServerChannel>() {
-                    @Override
-                    protected void initChannel(RakServerChannel ch) throws Exception {
-                        System.out.println("Initialised server channel");
-                    }
-                })
-                .childHandler(new ChannelInitializer<RakChildChannel>() {
-                    @Override
-                    protected void initChannel(RakChildChannel ch) throws Exception {
-                        System.out.println("Server child channel initialized " + ch.remoteAddress());
-                        ch.pipeline().addLast(RESEND_HANDLER());
-                    }
-                })
+                .bind(new InetSocketAddress("127.0.0.1", 19132))
+                .awaitUninterruptibly();
+    }
+
+    public void setupCookieServer() {
+        serverBootstrap()
+                .option(RakChannelOption.RAK_SEND_COOKIE, true)
                 .bind(new InetSocketAddress("127.0.0.1", 19132))
                 .awaitUninterruptibly();
     }
 
     @Test
     public void testClientConnect() {
+        setupServer();
         int mtu = RakConstants.MAXIMUM_MTU_SIZE;
         System.out.println("Testing client with MTU " + mtu);
 
-        Channel channel = clientBootstrap(mtu)
+        clientBootstrap(mtu)
+                .handler(new ChannelInitializer<RakClientChannel>() {
+                    @Override
+                    protected void initChannel(RakClientChannel ch) throws Exception {
+                        System.out.println("Client channel initialized");
+                    }
+                })
+                .connect(new InetSocketAddress("127.0.0.1", 19132))
+                .awaitUninterruptibly()
+                .channel();
+    }
+
+    @Test
+    public void testClientConnectWithCookie() {
+        setupCookieServer();
+        int mtu = RakConstants.MAXIMUM_MTU_SIZE;
+        System.out.println("Testing client with MTU " + mtu + " and cookie enabled");
+
+        clientBootstrap(mtu)
                 .handler(new ChannelInitializer<RakClientChannel>() {
                     @Override
                     protected void initChannel(RakClientChannel ch) throws Exception {
@@ -158,6 +182,7 @@ public class RakTests {
     @ParameterizedTest
     @MethodSource("validMtu")
     public void testClientResend(int mtu) {
+        setupServer();
         System.out.println("Testing client with MTU " + mtu);
 
         SecureRandom random = new SecureRandom();

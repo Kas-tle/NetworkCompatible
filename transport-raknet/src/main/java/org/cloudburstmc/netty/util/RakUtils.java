@@ -88,7 +88,7 @@ public class RakUtils {
                 int scopeId = buffer.readInt();
                 address = Inet6Address.getByAddress(null, addressBytes, scopeId);
             } else {
-                throw new UnsupportedOperationException("Unknown Internet Protocol version.");
+                throw new UnsupportedOperationException("Unknown Internet Protocol version. Expected 4 or 6, got " + type);
             }
         } catch (UnknownHostException e) {
             throw new IllegalArgumentException(e);
