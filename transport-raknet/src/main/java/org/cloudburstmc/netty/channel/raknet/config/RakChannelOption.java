@@ -158,6 +158,12 @@ public class RakChannelOption<T> extends ChannelOption<T> {
     public static final ChannelOption<Boolean> RAK_COMPATIBILITY_MODE =
             valueOf(RakChannelOption.class, "RAK_COMPATIBILITY_MODE");
 
+    /**
+     * Whether to send a cookie to the client during the connection process.
+     */
+    public static final ChannelOption<Boolean> RAK_SEND_COOKIE =
+            valueOf(RakChannelOption.class, "RAK_SEND_COOKIE");
+
     @SuppressWarnings("deprecation")
     protected RakChannelOption() {
         super(null);

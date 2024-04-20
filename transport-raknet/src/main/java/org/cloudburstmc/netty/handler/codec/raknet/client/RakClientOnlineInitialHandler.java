@@ -18,7 +18,6 @@ package org.cloudburstmc.netty.handler.codec.raknet.client;
 
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
@@ -32,7 +31,6 @@ import org.cloudburstmc.netty.channel.raknet.packet.RakMessage;
 import org.cloudburstmc.netty.util.RakUtils;
 
 import java.net.InetSocketAddress;
-import java.util.concurrent.TimeUnit;
 
 import static org.cloudburstmc.netty.channel.raknet.RakConstants.*;
 

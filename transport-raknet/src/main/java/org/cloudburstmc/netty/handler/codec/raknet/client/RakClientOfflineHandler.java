@@ -19,7 +19,6 @@ package org.cloudburstmc.netty.handler.codec.raknet.client;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.*;
-import io.netty.channel.socket.DatagramPacket;
 import io.netty.handler.codec.CorruptedFrameException;
 import io.netty.util.concurrent.ScheduledFuture;
 import org.cloudburstmc.netty.channel.raknet.RakChannel;
@@ -45,6 +44,8 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
 
     private RakOfflineState state = RakOfflineState.HANDSHAKE_1;
     private int connectionAttempts;
+    private int cookie;
+    private boolean security;
 
     public RakClientOfflineHandler(RakChannel rakChannel, ChannelPromise promise) {
         this.rakChannel = rakChannel;
@@ -153,11 +154,11 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
     private void onOpenConnectionReply1(ChannelHandlerContext ctx, ByteBuf buffer) {
         long serverGuid = buffer.readLong();
         boolean security = buffer.readBoolean();
-        int mtu = buffer.readShort();
         if (security) {
-            this.successPromise.tryFailure(new SecurityException());
-            return;
+            this.cookie = buffer.readInt();
+            this.security = true;
         }
+        int mtu = buffer.readShort();
 
         this.rakChannel.config().setOption(RakChannelOption.RAK_MTU, mtu);
         this.rakChannel.config().setOption(RakChannelOption.RAK_REMOTE_GUID, serverGuid);
@@ -174,7 +175,11 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
             RakUtils.readAddress(buffer); // serverAddress
         }
         int mtu = buffer.readShort();
-        buffer.readBoolean(); // security
+        boolean security = buffer.readBoolean(); // security
+        if (security) {
+            this.successPromise.tryFailure(new SecurityException());
+            return;
+        }
 
         this.rakChannel.config().setOption(RakChannelOption.RAK_MTU, mtu);
         this.state = RakOfflineState.HANDSHAKE_COMPLETED;
@@ -204,9 +209,13 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
         int mtuSize = this.rakChannel.config().getOption(RakChannelOption.RAK_MTU);
         ByteBuf magicBuf = this.rakChannel.config().getOption(RakChannelOption.RAK_UNCONNECTED_MAGIC);
 
-        ByteBuf request = channel.alloc().ioBuffer(34);
+        ByteBuf request = channel.alloc().ioBuffer(this.security ? 39 : 34);
         request.writeByte(ID_OPEN_CONNECTION_REQUEST_2);
         request.writeBytes(magicBuf, magicBuf.readerIndex(), magicBuf.readableBytes());
+        if (this.security) {
+            request.writeInt(this.cookie);
+            request.writeBoolean(false); // Client wrote challenge
+        }
         RakUtils.writeAddress(request, (InetSocketAddress) channel.remoteAddress());
         request.writeShort(mtuSize);
         request.writeLong(this.rakChannel.config().getOption(RakChannelOption.RAK_GUID));

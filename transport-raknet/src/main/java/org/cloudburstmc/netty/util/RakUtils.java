@@ -18,16 +18,19 @@ package org.cloudburstmc.netty.util;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.DefaultChannelPipeline;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.*;
 import java.util.Queue;
 
 public class RakUtils {
 
     private static final Constructor<DefaultChannelPipeline> DEFAULT_CHANNEL_PIPELINE_CONSTRUCTOR;
+    private static final Method PIPELINE_DESTROY_METHOD;
 
     static {
         try {
@@ -37,6 +40,14 @@ public class RakUtils {
         } catch (NoSuchMethodException e) {
             throw new AssertionError("Unable to find DefaultChannelPipeline(Channel) constructor", e);
         }
+
+        try {
+            Method method = DefaultChannelPipeline.class.getDeclaredMethod("destroy");
+            method.setAccessible(true);
+            PIPELINE_DESTROY_METHOD = method;
+        } catch (NoSuchMethodException e) {
+            throw new AssertionError("Unable to find DefaultChannelPipeline.destroy() method", e);
+        }
     }
 
     public static DefaultChannelPipeline newChannelPipeline(Channel channel) {
@@ -44,6 +55,14 @@ public class RakUtils {
             return DEFAULT_CHANNEL_PIPELINE_CONSTRUCTOR.newInstance(channel);
         } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
             throw new IllegalStateException("Unable to instantiate DefaultChannelPipeline", e);
+        }
+    }
+
+    public static void destroyChannelPipeline(ChannelPipeline pipeline) {
+        try {
+            PIPELINE_DESTROY_METHOD.invoke(pipeline);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            throw new IllegalStateException("Unable to destroy DefaultChannelPipeline", e);
         }
     }
 
@@ -69,7 +88,7 @@ public class RakUtils {
                 int scopeId = buffer.readInt();
                 address = Inet6Address.getByAddress(null, addressBytes, scopeId);
             } else {
-                throw new UnsupportedOperationException("Unknown Internet Protocol version.");
+                throw new UnsupportedOperationException("Unknown Internet Protocol version. Expected 4 or 6, got " + type);
             }
         } catch (UnknownHostException e) {
             throw new IllegalArgumentException(e);
