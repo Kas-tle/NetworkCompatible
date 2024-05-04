@@ -188,12 +188,16 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
     private void sendOpenConnectionRequest1(Channel channel) {
         int mtuDiff = 0;
 
-        if (this.connectionAttempts > 3) {
-            mtuDiff = 292;
-        }
-
-        if (this.connectionAttempts > 7) {
-            mtuDiff = 916;
+        if (this.rakChannel.config().getOption(RakChannelOption.RAK_COMPATIBILITY_MODE)) {
+            if (this.connectionAttempts > 3) {
+                mtuDiff = 292;
+            }
+    
+            if (this.connectionAttempts > 7) {
+                mtuDiff = 916;
+            }
+        } else {
+            mtuDiff = this.connectionAttempts * ((MAXIMUM_MTU_SIZE - MINIMUM_MTU_SIZE) / 9);
         }
 
         int mtuSize = this.rakChannel.config().getOption(RakChannelOption.RAK_MTU) - mtuDiff;
