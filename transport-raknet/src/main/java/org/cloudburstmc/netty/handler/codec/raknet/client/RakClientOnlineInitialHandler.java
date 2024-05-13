@@ -91,7 +91,7 @@ public class RakClientOnlineInitialHandler extends SimpleChannelInboundHandler<E
     private void onConnectionRequestAccepted(ChannelHandlerContext ctx, ByteBuf buf) {
         buf.skipBytes(1);
 
-        boolean compatibilityMode = this.rakChannel.config().getOption(RakChannelOption.RAK_COMPATIBILITY_MODE);
+        boolean compatibilityMode = this.rakChannel.config().isCompatibilityMode();
         if (compatibilityMode) {
             RakUtils.readCompatibleAddress(buf); // Client address
         } else {
@@ -103,6 +103,11 @@ public class RakClientOnlineInitialHandler extends SimpleChannelInboundHandler<E
         // Address + 2 * Long - Minimum amount of data
         int required = IPV4_MESSAGE_SIZE + 16;
         int count = 0;
+
+        if (compatibilityMode) {
+            count = 20;
+        }
+
         long pingTime = 0;
         try {
             while (buf.isReadable(required)) {
@@ -110,8 +115,8 @@ public class RakClientOnlineInitialHandler extends SimpleChannelInboundHandler<E
                     RakUtils.readCompatibleAddress(buf);
                 } else {
                     RakUtils.readAddress(buf);
+                    count++;
                 }
-                count++;
             }
             pingTime = buf.readLong();
             buf.readLong();

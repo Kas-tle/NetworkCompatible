@@ -169,7 +169,7 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
 
     private void onOpenConnectionReply2(ChannelHandlerContext ctx, ByteBuf buffer) {
         buffer.readLong(); // serverGuid
-        if (this.rakChannel.config().getOption(RakChannelOption.RAK_COMPATIBILITY_MODE)) {
+        if (this.rakChannel.config().isCompatibilityMode()) {
             RakUtils.readCompatibleAddress(buffer); // serverAddress
         } else {
             RakUtils.readAddress(buffer); // serverAddress
@@ -186,9 +186,11 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
     }
 
     private void sendOpenConnectionRequest1(Channel channel) {
-        int mtuDiff = 0;
+        int mtuSize;
+        
+        if (this.rakChannel.config().isCompatibilityMode()) {
+            int mtuDiff = 0;
 
-        if (this.rakChannel.config().getOption(RakChannelOption.RAK_COMPATIBILITY_MODE)) {
             if (this.connectionAttempts > 3) {
                 mtuDiff = 292;
             }
@@ -196,11 +198,14 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
             if (this.connectionAttempts > 7) {
                 mtuDiff = 916;
             }
+
+            // Vanilla client always uses 1492 as starting MTU so ignore RakChannelOption.RAK_MTU for compatibility mode
+            mtuSize = 1492 - mtuDiff;
         } else {
-            mtuDiff = this.connectionAttempts * ((MAXIMUM_MTU_SIZE - MINIMUM_MTU_SIZE) / 9);
+            int mtuDiff = this.connectionAttempts * ((MAXIMUM_MTU_SIZE - MINIMUM_MTU_SIZE) / 9);
+            mtuSize = this.rakChannel.config().getOption(RakChannelOption.RAK_MTU) - mtuDiff;
         }
 
-        int mtuSize = this.rakChannel.config().getOption(RakChannelOption.RAK_MTU) - mtuDiff;
         if (mtuSize < MINIMUM_MTU_SIZE) {
             mtuSize = MINIMUM_MTU_SIZE;
         }
