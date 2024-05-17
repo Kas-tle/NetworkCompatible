@@ -17,15 +17,10 @@
 description = "RakNet transport for Netty"
 
 dependencies {
-    api(libs.netty.common)
-    api(libs.netty.buffer)
-    api(libs.netty.codec)
-    api(libs.netty.transport)
+    api(libs.bundles.netty)
     api(libs.expiringmap)
 
-    testImplementation(libs.junit.jupiter.engine)
-    testImplementation(libs.junit.jupiter.api)
-    testImplementation(libs.junit.jupiter.params)
+    testImplementation(libs.bundles.junit)
 }
 
 tasks.jar {

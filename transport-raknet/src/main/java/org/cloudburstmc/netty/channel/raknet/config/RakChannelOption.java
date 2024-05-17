@@ -164,6 +164,9 @@ public class RakChannelOption<T> extends ChannelOption<T> {
     public static final ChannelOption<Boolean> RAK_SEND_COOKIE =
             valueOf(RakChannelOption.class, "RAK_SEND_COOKIE");
 
+    public static final ChannelOption<Integer[]> RAK_MTU_SIZES =
+            valueOf(RakChannelOption.class, "RAK_MTU_SIZES");
+
     @SuppressWarnings("deprecation")
     protected RakChannelOption() {
         super(null);

@@ -24,6 +24,7 @@ import io.netty.channel.ChannelOption;
 import java.util.Map;
 
 import static org.cloudburstmc.netty.channel.raknet.RakConstants.DEFAULT_UNCONNECTED_MAGIC;
+import static org.cloudburstmc.netty.channel.raknet.RakConstants.MTU_SIZES;
 import static org.cloudburstmc.netty.channel.raknet.RakConstants.SESSION_TIMEOUT_MS;
 
 /**
@@ -35,6 +36,8 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
     private volatile long connectTimeout = SESSION_TIMEOUT_MS;
     private volatile long sessionTimeout = SESSION_TIMEOUT_MS;
     private volatile long serverGuid;
+    private volatile boolean compatibilityMode = false;
+    private volatile Integer[] mtuSizes = MTU_SIZES;
 
     public DefaultRakClientConfig(Channel channel) {
         super(channel);
@@ -42,7 +45,10 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
 
     @Override
     public Map<ChannelOption<?>, Object> getOptions() {
-        return this.getOptions(super.getOptions(), RakChannelOption.RAK_UNCONNECTED_MAGIC, RakChannelOption.RAK_CONNECT_TIMEOUT, RakChannelOption.RAK_REMOTE_GUID, RakChannelOption.RAK_SESSION_TIMEOUT);
+        return this.getOptions(
+            super.getOptions(), 
+            RakChannelOption.RAK_UNCONNECTED_MAGIC, RakChannelOption.RAK_CONNECT_TIMEOUT, RakChannelOption.RAK_REMOTE_GUID, RakChannelOption.RAK_SESSION_TIMEOUT, RakChannelOption.RAK_COMPATIBILITY_MODE,
+            RakChannelOption.RAK_MTU_SIZES);
     }
 
     @SuppressWarnings("unchecked")
@@ -56,6 +62,10 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
             return (T) Long.valueOf(this.getServerGuid());
         } else if (option == RakChannelOption.RAK_SESSION_TIMEOUT) {
             return (T) Long.valueOf(this.getSessionTimeout());
+        } else if (option == RakChannelOption.RAK_COMPATIBILITY_MODE) {
+            return (T) Boolean.valueOf(this.isCompatibilityMode());
+        } else if (option == RakChannelOption.RAK_MTU_SIZES) {
+            return (T) this.getMtuSizes();
         }
         return super.getOption(option);
     }
@@ -75,6 +85,12 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
             return true;
         } else if (option == RakChannelOption.RAK_SESSION_TIMEOUT) {
             this.setSessionTimeout((Long) value);
+            return true;
+        } else if (option == RakChannelOption.RAK_COMPATIBILITY_MODE) {
+            this.setCompatibilityMode((Boolean) value);
+            return true;
+        } else if (option == RakChannelOption.RAK_MTU_SIZES) {
+            this.setMtuSizes((Integer[]) value);
             return true;
         }
         return super.setOption(option, value);
@@ -119,5 +135,21 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
     @Override
     public long getSessionTimeout() {
         return this.sessionTimeout;
+    }
+
+    public boolean isCompatibilityMode() {
+        return this.compatibilityMode;
+    }
+
+    public void setCompatibilityMode(boolean enable) {
+        this.compatibilityMode = enable;
+    }
+
+    public Integer[] getMtuSizes() {
+        return this.mtuSizes.clone();
+    }
+
+    public void setMtuSizes(Integer[] mtuSizes) {
+        this.mtuSizes = mtuSizes.clone();
     }
 }

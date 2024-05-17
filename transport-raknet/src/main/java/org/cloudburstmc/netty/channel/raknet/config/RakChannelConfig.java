@@ -51,8 +51,4 @@ public interface RakChannelConfig extends ChannelConfig {
     int getFlushInterval();
 
     void setFlushInterval(int intervalMillis);
-
-    boolean isCompatibilityMode();
-
-    void setCompatibilityMode(boolean enable);
 }

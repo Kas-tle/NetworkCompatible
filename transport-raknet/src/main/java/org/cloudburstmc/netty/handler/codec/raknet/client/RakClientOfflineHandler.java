@@ -43,7 +43,7 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
     private ScheduledFuture<?> retryFuture;
 
     private RakOfflineState state = RakOfflineState.HANDSHAKE_1;
-    private int connectionAttempts;
+    private int connectionAttempts = 0;
     private int cookie;
     private boolean security;
 
@@ -169,8 +169,8 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
 
     private void onOpenConnectionReply2(ChannelHandlerContext ctx, ByteBuf buffer) {
         buffer.readLong(); // serverGuid
-        if (this.rakChannel.config().isCompatibilityMode()) {
-            RakUtils.readCompatibleAddress(buffer); // serverAddress
+        if (this.rakChannel.config().getOption(RakChannelOption.RAK_COMPATIBILITY_MODE)) {
+            RakUtils.skipAddress(buffer); // serverAddress
         } else {
             RakUtils.readAddress(buffer); // serverAddress
         }
@@ -186,29 +186,8 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
     }
 
     private void sendOpenConnectionRequest1(Channel channel) {
-        int mtuSize;
-        
-        if (this.rakChannel.config().isCompatibilityMode()) {
-            int mtuDiff = 0;
-
-            if (this.connectionAttempts > 3) {
-                mtuDiff = 292;
-            }
-    
-            if (this.connectionAttempts > 7) {
-                mtuDiff = 916;
-            }
-
-            // Vanilla client always uses 1492 as starting MTU so ignore RakChannelOption.RAK_MTU for compatibility mode
-            mtuSize = 1492 - mtuDiff;
-        } else {
-            int mtuDiff = this.connectionAttempts * ((MAXIMUM_MTU_SIZE - MINIMUM_MTU_SIZE) / 9);
-            mtuSize = this.rakChannel.config().getOption(RakChannelOption.RAK_MTU) - mtuDiff;
-        }
-
-        if (mtuSize < MINIMUM_MTU_SIZE) {
-            mtuSize = MINIMUM_MTU_SIZE;
-        }
+        int mtuSizeIndex = Math.min(this.connectionAttempts / 4, this.rakChannel.config().getOption(RakChannelOption.RAK_MTU_SIZES).length - 1);
+        int mtuSize = this.rakChannel.config().getOption(RakChannelOption.RAK_MTU_SIZES)[mtuSizeIndex];
 
         ByteBuf magicBuf = this.rakChannel.config().getOption(RakChannelOption.RAK_UNCONNECTED_MAGIC);
         int rakVersion = this.rakChannel.config().getOption(RakChannelOption.RAK_PROTOCOL_VERSION);

@@ -20,6 +20,8 @@ import io.netty.channel.ChannelMetadata;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.socket.DatagramChannel;
+import io.netty.util.internal.logging.InternalLogger;
+import io.netty.util.internal.logging.InternalLoggerFactory;
 import org.cloudburstmc.netty.channel.proxy.ProxyChannel;
 import org.cloudburstmc.netty.channel.raknet.config.DefaultRakClientConfig;
 import org.cloudburstmc.netty.channel.raknet.config.RakChannelConfig;
@@ -27,9 +29,11 @@ import org.cloudburstmc.netty.handler.codec.raknet.ProxyInboundRouter;
 import org.cloudburstmc.netty.handler.codec.raknet.client.RakClientProxyRouteHandler;
 import org.cloudburstmc.netty.handler.codec.raknet.client.RakClientRouteHandler;
 import org.cloudburstmc.netty.handler.codec.raknet.common.*;
+import org.cloudburstmc.netty.util.IpDontFragmentProvider;
 
 public class RakClientChannel extends ProxyChannel<DatagramChannel> implements RakChannel {
 
+    private static final InternalLogger log = InternalLoggerFactory.getInstance(RakClientChannel.class);
     private static final ChannelMetadata metadata = new ChannelMetadata(true);
 
     /**
@@ -41,6 +45,12 @@ public class RakClientChannel extends ProxyChannel<DatagramChannel> implements R
     public RakClientChannel(DatagramChannel channel) {
         super(channel);
         this.config = new DefaultRakClientConfig(this);
+
+        // Set IP_DONT_FRAGMENT option if possible
+        if (!IpDontFragmentProvider.trySet(this)) {
+            log.warn("Failed to set IP_DONT_FRAGMENT option for client channel! This may cause connection issues with large MTU values. Update to Java 19+ or use a Unix-based OS resolve this.");
+        }
+
         this.pipeline().addLast(RakClientRouteHandler.NAME, new RakClientRouteHandler(this));
         // Transforms DatagramPacket to ByteBuf if channel has been already connected
         this.rakPipeline().addFirst(RakClientProxyRouteHandler.NAME, new RakClientProxyRouteHandler(this));

@@ -96,22 +96,16 @@ public class RakUtils {
         return new InetSocketAddress(address, port);
     }
 
-    public static boolean readCompatibleAddress(ByteBuf buffer) {
+    public static boolean skipAddress(ByteBuf buffer) {
         short type = buffer.readByte();
         try {
             if (type == 4) {
-                byte[] addressBytes = new byte[4];
-                buffer.readBytes(addressBytes);
-                flip(addressBytes);
-                buffer.readUnsignedShort();
+                // Skip 4 + 2 bytes
+                buffer.skipBytes(6);
             } else if (type == 6) {
                 // Vanilla client assumes type 6 if type is not 4
-                buffer.readShortLE(); // Family, AF_INET6
-                buffer.readUnsignedShort();
-                buffer.readInt(); // Flow information
-                byte[] addressBytes = new byte[16];
-                buffer.readBytes(addressBytes);
-                buffer.readInt();
+                // Skip 2 + 2 + 4 + 16 + 4 bytes
+                buffer.skipBytes(28);
             } else {
                 return false;
             }

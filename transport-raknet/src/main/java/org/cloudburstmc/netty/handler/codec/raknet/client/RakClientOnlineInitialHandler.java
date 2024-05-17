@@ -91,9 +91,9 @@ public class RakClientOnlineInitialHandler extends SimpleChannelInboundHandler<E
     private void onConnectionRequestAccepted(ChannelHandlerContext ctx, ByteBuf buf) {
         buf.skipBytes(1);
 
-        boolean compatibilityMode = this.rakChannel.config().isCompatibilityMode();
+        boolean compatibilityMode = this.rakChannel.config().getOption(RakChannelOption.RAK_COMPATIBILITY_MODE);
         if (compatibilityMode) {
-            RakUtils.readCompatibleAddress(buf); // Client address
+            RakUtils.skipAddress(buf); // Client address
         } else {
             RakUtils.readAddress(buf); // Client address
         }
@@ -109,20 +109,16 @@ public class RakClientOnlineInitialHandler extends SimpleChannelInboundHandler<E
         }
 
         long pingTime = 0;
-        try {
-            while (buf.isReadable(required)) {
-                if (compatibilityMode) {
-                    RakUtils.readCompatibleAddress(buf);
-                } else {
-                    RakUtils.readAddress(buf);
-                    count++;
-                }
+        while (buf.isReadable(required)) {
+            if (compatibilityMode) {
+                RakUtils.skipAddress(buf);
+            } else {
+                RakUtils.readAddress(buf);
+                count++;
             }
-            pingTime = buf.readLong();
-            buf.readLong();
-        } catch (IndexOutOfBoundsException ignored) {
-            // Hive sends malformed IPv6 address
         }
+        pingTime = buf.readLong();
+        buf.readLong();
 
         ByteBuf buffer = ctx.alloc().ioBuffer();
         buffer.writeByte(ID_NEW_INCOMING_CONNECTION);
