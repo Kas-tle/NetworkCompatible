@@ -102,11 +102,6 @@ public class RakClientOnlineInitialHandler extends SimpleChannelInboundHandler<E
 
         // Address + 2 * Long - Minimum amount of data
         int required = IPV4_MESSAGE_SIZE + 16;
-        int count = 0;
-
-        if (compatibilityMode) {
-            count = 20;
-        }
 
         long pingTime = 0;
         while (buf.isReadable(required)) {
@@ -114,7 +109,6 @@ public class RakClientOnlineInitialHandler extends SimpleChannelInboundHandler<E
                 RakUtils.skipAddress(buf);
             } else {
                 RakUtils.readAddress(buf);
-                count++;
             }
         }
         pingTime = buf.readLong();
@@ -123,7 +117,7 @@ public class RakClientOnlineInitialHandler extends SimpleChannelInboundHandler<E
         ByteBuf buffer = ctx.alloc().ioBuffer();
         buffer.writeByte(ID_NEW_INCOMING_CONNECTION);
         RakUtils.writeAddress(buffer, (InetSocketAddress) ctx.channel().remoteAddress());
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < this.rakChannel.config().getOption(RakChannelOption.RAK_CLIENT_INTERNAL_ADDRESSES); i++) {
             RakUtils.writeAddress(buffer, LOCAL_ADDRESS);
         }
         buffer.writeLong(pingTime);

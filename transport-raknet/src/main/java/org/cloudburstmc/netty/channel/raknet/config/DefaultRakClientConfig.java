@@ -38,6 +38,8 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
     private volatile long serverGuid;
     private volatile boolean compatibilityMode = false;
     private volatile Integer[] mtuSizes = MTU_SIZES;
+    private volatile boolean ipDontFragment = false;
+    private volatile int clientInternalAddresses = 10;
 
     public DefaultRakClientConfig(Channel channel) {
         super(channel);
@@ -48,7 +50,7 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
         return this.getOptions(
             super.getOptions(), 
             RakChannelOption.RAK_UNCONNECTED_MAGIC, RakChannelOption.RAK_CONNECT_TIMEOUT, RakChannelOption.RAK_REMOTE_GUID, RakChannelOption.RAK_SESSION_TIMEOUT, RakChannelOption.RAK_COMPATIBILITY_MODE,
-            RakChannelOption.RAK_MTU_SIZES);
+            RakChannelOption.RAK_MTU_SIZES, RakChannelOption.RAK_IP_DONT_FRAGMENT, RakChannelOption.RAK_CLIENT_INTERNAL_ADDRESSES);
     }
 
     @SuppressWarnings("unchecked")
@@ -66,6 +68,10 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
             return (T) Boolean.valueOf(this.isCompatibilityMode());
         } else if (option == RakChannelOption.RAK_MTU_SIZES) {
             return (T) this.getMtuSizes();
+        } else if (option == RakChannelOption.RAK_IP_DONT_FRAGMENT) {
+            return (T) Boolean.valueOf(this.ipDontFragment);
+        } else if (option == RakChannelOption.RAK_CLIENT_INTERNAL_ADDRESSES) {
+            return (T) Integer.valueOf(this.clientInternalAddresses);
         }
         return super.getOption(option);
     }
@@ -91,6 +97,12 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
             return true;
         } else if (option == RakChannelOption.RAK_MTU_SIZES) {
             this.setMtuSizes((Integer[]) value);
+            return true;
+        } else if (option == RakChannelOption.RAK_IP_DONT_FRAGMENT) {
+            this.ipDontFragment = (Boolean) value;
+            return true;
+        } else if (option == RakChannelOption.RAK_CLIENT_INTERNAL_ADDRESSES) {
+            this.clientInternalAddresses = (Integer) value;
             return true;
         }
         return super.setOption(option, value);
@@ -151,5 +163,21 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
 
     public void setMtuSizes(Integer[] mtuSizes) {
         this.mtuSizes = mtuSizes.clone();
+    }
+
+    public boolean isIpDontFragment() {
+        return this.ipDontFragment;
+    }
+
+    public void setIpDontFragment(boolean enable) {
+        this.ipDontFragment = enable;
+    }
+
+    public int getClientInternalAddresses() {
+        return this.clientInternalAddresses;
+    }
+
+    public void setClientInternalAddresses(int clientInternalAddresses) {
+        this.clientInternalAddresses = clientInternalAddresses;
     }
 }
