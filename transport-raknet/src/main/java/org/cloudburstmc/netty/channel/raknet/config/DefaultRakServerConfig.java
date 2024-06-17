@@ -22,6 +22,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultChannelConfig;
 import org.cloudburstmc.netty.channel.raknet.RakConstants;
 import org.cloudburstmc.netty.channel.raknet.RakServerChannel;
+import org.cloudburstmc.netty.util.IpDontFragmentProvider;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -47,6 +48,8 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
     private volatile int globalPacketLimit = RakConstants.DEFAULT_GLOBAL_PACKET_LIMIT;
     private volatile RakServerMetrics metrics;
     private volatile boolean sendCookie;
+    private volatile boolean ipDontFragment = false;
+
 
     public DefaultRakServerConfig(RakServerChannel channel) {
         super(channel);
@@ -58,7 +61,7 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
                 super.getOptions(),
                 RakChannelOption.RAK_GUID, RakChannelOption.RAK_MAX_CHANNELS, RakChannelOption.RAK_MAX_CONNECTIONS, RakChannelOption.RAK_SUPPORTED_PROTOCOLS, RakChannelOption.RAK_UNCONNECTED_MAGIC,
                 RakChannelOption.RAK_ADVERTISEMENT, RakChannelOption.RAK_HANDLE_PING, RakChannelOption.RAK_PACKET_LIMIT, RakChannelOption.RAK_GLOBAL_PACKET_LIMIT, RakChannelOption.RAK_SEND_COOKIE,
-                RakChannelOption.RAK_SERVER_METRICS);
+                RakChannelOption.RAK_SERVER_METRICS, RakChannelOption.RAK_IP_DONT_FRAGMENT);
     }
 
     @SuppressWarnings("unchecked")
@@ -103,6 +106,9 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
         if (option == RakChannelOption.RAK_SEND_COOKIE) {
             return (T) Boolean.valueOf(this.sendCookie);
         }
+        if (option == RakChannelOption.RAK_IP_DONT_FRAGMENT) {
+            return (T) Boolean.valueOf(this.ipDontFragment);
+        }
         return this.channel.parent().config().getOption(option);
     }
 
@@ -133,10 +139,13 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
         } else if (option == RakChannelOption.RAK_GLOBAL_PACKET_LIMIT) {
             this.setGlobalPacketLimit((Integer) value);
         } else if (option == RakChannelOption.RAK_SEND_COOKIE) {
-            this.sendCookie = (Boolean) value;
+            this.setSendCookie((Boolean) value);
         } else if (option == RakChannelOption.RAK_SERVER_METRICS) {
             this.setMetrics((RakServerMetrics) value);
-        } else{
+        } else if (option == RakChannelOption.RAK_IP_DONT_FRAGMENT) {
+            this.setIpDontFragment((Boolean) value);
+            return (Boolean) value == this.getIpDontFragment();
+        } else {
             return this.channel.parent().config().setOption(option, value);
         }
         return true;
@@ -290,5 +299,15 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
     @Override
     public RakServerMetrics getMetrics() {
         return this.metrics;
+    }
+
+    @Override
+    public void setIpDontFragment(boolean ipDontFragment) {
+        this.ipDontFragment = ipDontFragment ? IpDontFragmentProvider.trySet(this.channel.parent()) : false;
+    }
+
+    @Override
+    public boolean getIpDontFragment() {
+        return this.ipDontFragment;
     }
 }

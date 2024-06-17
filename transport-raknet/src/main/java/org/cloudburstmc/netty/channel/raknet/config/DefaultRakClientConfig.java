@@ -20,6 +20,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
+import org.cloudburstmc.netty.util.IpDontFragmentProvider;
 
 import java.util.Map;
 
@@ -99,10 +100,10 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
             this.setMtuSizes((Integer[]) value);
             return true;
         } else if (option == RakChannelOption.RAK_IP_DONT_FRAGMENT) {
-            this.ipDontFragment = (Boolean) value;
-            return true;
+            this.setIpDontFragment((Boolean) value);
+            return (Boolean) value == this.isIpDontFragment();
         } else if (option == RakChannelOption.RAK_CLIENT_INTERNAL_ADDRESSES) {
-            this.clientInternalAddresses = (Integer) value;
+            this.setClientInternalAddresses((Integer) value);
             return true;
         }
         return super.setOption(option, value);
@@ -170,7 +171,7 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
     }
 
     public void setIpDontFragment(boolean enable) {
-        this.ipDontFragment = enable;
+        this.ipDontFragment = enable ? IpDontFragmentProvider.trySet(this.channel) : false;
     }
 
     public int getClientInternalAddresses() {

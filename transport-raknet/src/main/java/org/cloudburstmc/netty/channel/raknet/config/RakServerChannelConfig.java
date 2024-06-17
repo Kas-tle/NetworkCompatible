@@ -72,4 +72,8 @@ public interface RakServerChannelConfig extends ChannelConfig {
     void setMetrics(RakServerMetrics metrics);
 
     RakServerMetrics getMetrics();
+
+    void setIpDontFragment(boolean ipDontFragment);
+
+    boolean getIpDontFragment();
 }
