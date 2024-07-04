@@ -47,6 +47,7 @@ public class IpDontFragmentProvider {
     @SuppressWarnings("unchecked")
     public static <T> boolean trySet(Channel channel, boolean value) {
         if (IP_DONT_FRAGMENT_OPTION == null) return false;
-        return channel.config().setOption((ChannelOption<T>) IP_DONT_FRAGMENT_OPTION, (T) (value ? IP_DONT_FRAGMENT_TRUE_VALUE : IP_DONT_FRAGMENT_FALSE_VALUE));
+        boolean success = channel.config().setOption((ChannelOption<T>) IP_DONT_FRAGMENT_OPTION, (T) (value ? IP_DONT_FRAGMENT_TRUE_VALUE : IP_DONT_FRAGMENT_FALSE_VALUE));
+        return success ? value : !value;
     }
 }
