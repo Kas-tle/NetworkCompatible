@@ -303,7 +303,7 @@ public class DefaultRakServerConfig extends DefaultChannelConfig implements RakS
 
     @Override
     public void setIpDontFragment(boolean ipDontFragment) {
-        this.ipDontFragment = ipDontFragment ? IpDontFragmentProvider.trySet(this.channel.parent()) : false;
+        this.ipDontFragment = IpDontFragmentProvider.trySet(this.channel.parent(), ipDontFragment);
     }
 
     @Override

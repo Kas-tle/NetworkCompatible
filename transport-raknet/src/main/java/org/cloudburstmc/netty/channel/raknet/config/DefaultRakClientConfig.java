@@ -171,7 +171,7 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
     }
 
     public void setIpDontFragment(boolean enable) {
-        this.ipDontFragment = enable ? IpDontFragmentProvider.trySet(this.channel) : false;
+        this.ipDontFragment = IpDontFragmentProvider.trySet(this.channel, enable);
     }
 
     public int getClientInternalAddresses() {

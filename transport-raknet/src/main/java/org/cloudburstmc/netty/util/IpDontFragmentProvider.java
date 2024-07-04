@@ -10,11 +10,13 @@ import java.net.SocketOption;
 
 public class IpDontFragmentProvider {
     private static final ChannelOption<?> IP_DONT_FRAGMENT_OPTION;
-    private static final Object IP_DONT_FRAGMENT_VALUE;
+    private static final Object IP_DONT_FRAGMENT_TRUE_VALUE;
+    private static final Object IP_DONT_FRAGMENT_FALSE_VALUE;
 
     static {
         ChannelOption<?> ipDontFragmentOption = null;
-        Object ipDontFragmentValue = null;
+        Object ipDontFragmentTrueValue = null;
+        Object ipDontFragmentFalseValue = null;
         
         setterBlock: {
             // Windows and Linux Compatible (Java 19+)
@@ -23,7 +25,8 @@ public class IpDontFragmentProvider {
                 Field f = c.getField("IP_DONTFRAGMENT");
     
                 ipDontFragmentOption = NioChannelOption.of((SocketOption<?>) f.get(null));
-                ipDontFragmentValue = true;
+                ipDontFragmentTrueValue = true;
+                ipDontFragmentFalseValue = false;
                 break setterBlock;
             } catch (ClassNotFoundException | NoSuchFieldException | SecurityException | IllegalArgumentException | IllegalAccessException e) {
                 
@@ -31,17 +34,19 @@ public class IpDontFragmentProvider {
 
             // Unix Compatible (Java 8+)
             ipDontFragmentOption = new IntegerUnixChannelOption("IP_DONTFRAG", 0 /* IPPROTO_IP */, 10 /* IP_MTU_DISCOVER */);
-            ipDontFragmentValue = 2 /* IP_PMTUDISC_DO */;
+            ipDontFragmentTrueValue = 2 /* IP_PMTUDISC_DO */;
+            ipDontFragmentFalseValue = 0 /* IP_PMTUDISC_DONT */;
             break setterBlock;
         }
 
         IP_DONT_FRAGMENT_OPTION = ipDontFragmentOption;
-        IP_DONT_FRAGMENT_VALUE = ipDontFragmentValue;
+        IP_DONT_FRAGMENT_TRUE_VALUE = ipDontFragmentTrueValue;
+        IP_DONT_FRAGMENT_FALSE_VALUE = ipDontFragmentFalseValue;
     }
 
     @SuppressWarnings("unchecked")
-    public static <T> boolean trySet(Channel channel) {
+    public static <T> boolean trySet(Channel channel, boolean value) {
         if (IP_DONT_FRAGMENT_OPTION == null) return false;
-        return channel.config().setOption((ChannelOption<T>) IP_DONT_FRAGMENT_OPTION, (T) IP_DONT_FRAGMENT_VALUE);
+        return channel.config().setOption((ChannelOption<T>) IP_DONT_FRAGMENT_OPTION, (T) (value ? IP_DONT_FRAGMENT_TRUE_VALUE : IP_DONT_FRAGMENT_FALSE_VALUE));
     }
 }
