@@ -20,6 +20,8 @@ import io.netty.channel.ChannelMetadata;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.socket.DatagramChannel;
+import io.netty.util.internal.logging.InternalLogger;
+import io.netty.util.internal.logging.InternalLoggerFactory;
 import org.cloudburstmc.netty.channel.proxy.ProxyChannel;
 import org.cloudburstmc.netty.channel.raknet.config.DefaultRakClientConfig;
 import org.cloudburstmc.netty.channel.raknet.config.RakChannelConfig;
@@ -30,6 +32,7 @@ import org.cloudburstmc.netty.handler.codec.raknet.common.*;
 
 public class RakClientChannel extends ProxyChannel<DatagramChannel> implements RakChannel {
 
+    private static final InternalLogger log = InternalLoggerFactory.getInstance(RakClientChannel.class);
     private static final ChannelMetadata metadata = new ChannelMetadata(true);
 
     /**
@@ -41,6 +44,7 @@ public class RakClientChannel extends ProxyChannel<DatagramChannel> implements R
     public RakClientChannel(DatagramChannel channel) {
         super(channel);
         this.config = new DefaultRakClientConfig(this);
+
         this.pipeline().addLast(RakClientRouteHandler.NAME, new RakClientRouteHandler(this));
         // Transforms DatagramPacket to ByteBuf if channel has been already connected
         this.rakPipeline().addFirst(RakClientProxyRouteHandler.NAME, new RakClientProxyRouteHandler(this));

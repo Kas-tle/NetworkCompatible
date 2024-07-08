@@ -153,10 +153,34 @@ public class RakChannelOption<T> extends ChannelOption<T> {
             valueOf(RakChannelOption.class, "RAK_GLOBAL_PACKET_LIMIT");
 
     /**
+     * Whether the client should be run in compatibility mode for closer behavior to the vanilla client RakNet implementation.
+     */
+    public static final ChannelOption<Boolean> RAK_COMPATIBILITY_MODE =
+            valueOf(RakChannelOption.class, "RAK_COMPATIBILITY_MODE");
+
+    /**
      * Whether to send a cookie to the client during the connection process.
      */
     public static final ChannelOption<Boolean> RAK_SEND_COOKIE =
             valueOf(RakChannelOption.class, "RAK_SEND_COOKIE");
+
+    /**
+     * An array of MTU sizes that the RakNet client will use when initially connecting.
+     */
+    public static final ChannelOption<Integer[]> RAK_MTU_SIZES =
+            valueOf(RakChannelOption.class, "RAK_MTU_SIZES");
+
+    /**
+     * Whether to use the IP_DONT_FRAGMENT option for the client channel.
+     */
+    public static final ChannelOption<Boolean> RAK_IP_DONT_FRAGMENT =
+            valueOf(RakChannelOption.class, "RAK_IP_DONT_FRAGMENT");
+
+    /**
+     * The amount of internal addresses to send from the client in New Incoming Connection packets.
+     */
+    public static final ChannelOption<Integer> RAK_CLIENT_INTERNAL_ADDRESSES =
+            valueOf(RakChannelOption.class, "RAK_CLIENT_INTERNAL_ADDRESSES");
 
     @SuppressWarnings("deprecation")
     protected RakChannelOption() {

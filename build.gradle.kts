@@ -102,6 +102,9 @@ subprojects {
             options.encoding = "UTF-8"
         }
         named<Test>("test") {
+            minHeapSize = "512m"
+            maxHeapSize = "1024m"
+            jvmArgs = listOf("-XX:MaxMetaspaceSize=512m")
             useJUnitPlatform()
         }
     }

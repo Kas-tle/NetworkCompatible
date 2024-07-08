@@ -43,7 +43,7 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
     private ScheduledFuture<?> retryFuture;
 
     private RakOfflineState state = RakOfflineState.HANDSHAKE_1;
-    private int connectionAttempts;
+    private int connectionAttempts = 0;
     private int cookie;
     private boolean security;
 
@@ -169,7 +169,11 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
 
     private void onOpenConnectionReply2(ChannelHandlerContext ctx, ByteBuf buffer) {
         buffer.readLong(); // serverGuid
-        RakUtils.readAddress(buffer); // serverAddress
+        if (this.rakChannel.config().getOption(RakChannelOption.RAK_COMPATIBILITY_MODE)) {
+            RakUtils.skipAddress(buffer); // serverAddress
+        } else {
+            RakUtils.readAddress(buffer); // serverAddress
+        }
         int mtu = buffer.readShort();
         boolean security = buffer.readBoolean(); // security
         if (security) {
@@ -182,11 +186,8 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
     }
 
     private void sendOpenConnectionRequest1(Channel channel) {
-        int mtuDiff = (MAXIMUM_MTU_SIZE - MINIMUM_MTU_SIZE) / 9;
-        int mtuSize = this.rakChannel.config().getOption(RakChannelOption.RAK_MTU) - (this.connectionAttempts * mtuDiff);
-        if (mtuSize < MINIMUM_MTU_SIZE) {
-            mtuSize = MINIMUM_MTU_SIZE;
-        }
+        int mtuSizeIndex = Math.min(this.connectionAttempts / 4, this.rakChannel.config().getOption(RakChannelOption.RAK_MTU_SIZES).length - 1);
+        int mtuSize = this.rakChannel.config().getOption(RakChannelOption.RAK_MTU_SIZES)[mtuSizeIndex];
 
         ByteBuf magicBuf = this.rakChannel.config().getOption(RakChannelOption.RAK_UNCONNECTED_MAGIC);
         int rakVersion = this.rakChannel.config().getOption(RakChannelOption.RAK_PROTOCOL_VERSION);

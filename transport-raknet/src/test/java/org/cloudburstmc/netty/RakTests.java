@@ -178,6 +178,25 @@ public class RakTests {
                 .channel();
     }
 
+    @Test
+    public void testCompatibleClientConnect() {
+        int mtu = RakConstants.MAXIMUM_MTU_SIZE;
+        System.out.println("Testing client with MTU " + mtu);
+
+        Channel channel = clientBootstrap(mtu)
+                .option(RakChannelOption.RAK_COMPATIBILITY_MODE, true)
+                .option(RakChannelOption.RAK_GUID, ThreadLocalRandom.current().nextLong())
+                .handler(new ChannelInitializer<RakClientChannel>() {
+                    @Override
+                    protected void initChannel(RakClientChannel ch) throws Exception {
+                        System.out.println("Client channel initialized");
+                    }
+                })
+                .connect(new InetSocketAddress("127.0.0.1", 19132))
+                .awaitUninterruptibly()
+                .channel();
+    }
+
 
     @ParameterizedTest
     @MethodSource("validMtu")
