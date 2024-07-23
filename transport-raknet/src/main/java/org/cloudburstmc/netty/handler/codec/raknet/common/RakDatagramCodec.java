@@ -64,12 +64,12 @@ public class RakDatagramCodec extends MessageToMessageCodec<ByteBuf, RakDatagram
             return;
         }
 
-        RakDatagramPacket packet = RakDatagramPacket.newInstance();
+        RakDatagramPacket packet = new RakDatagramPacket();
         try {
             packet.setFlags(buffer.readByte());
             packet.setSequenceIndex(buffer.readUnsignedMediumLE());
             while (buffer.isReadable()) {
-                EncapsulatedPacket encapsulated = EncapsulatedPacket.newInstance();
+                EncapsulatedPacket encapsulated = new EncapsulatedPacket();
                 try {
                     encapsulated.decode(buffer);
                     packet.getPackets().add(encapsulated.retain());

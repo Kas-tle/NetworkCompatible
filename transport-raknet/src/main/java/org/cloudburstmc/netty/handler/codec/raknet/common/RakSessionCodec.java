@@ -156,7 +156,6 @@ public class RakSessionCodec extends ChannelDuplexHandler {
                 while ((packet = orderingHeap.poll()) != null) {
                     packet.release();
                 }
-                orderingHeap.release();
             }
         }
 
@@ -167,7 +166,6 @@ public class RakSessionCodec extends ChannelDuplexHandler {
             while ((packet = outgoingPackets.poll()) != null) {
                 packet.release();
             }
-            outgoingPackets.release();
         }
 
         if (log.isTraceEnabled()) {
@@ -177,7 +175,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
 
     private void initHeapWeights() {
         for (int priorityLevel = 0; priorityLevel < 4; priorityLevel++) {
-            this.outgoingPacketNextWeights[priorityLevel] = (1 << priorityLevel) * priorityLevel + priorityLevel;
+            this.outgoingPacketNextWeights[priorityLevel] = (1L << priorityLevel) * priorityLevel + priorityLevel;
         }
     }
 
@@ -555,7 +553,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
         }
 
         int transmissionBandwidth = this.slidingWindow.getTransmissionBandwidth();
-        RakDatagramPacket datagram = RakDatagramPacket.newInstance();
+        RakDatagramPacket datagram = new RakDatagramPacket();
         datagram.setSendTime(curTime);
         EncapsulatedPacket packet;
 
@@ -572,7 +570,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
             if (!datagram.tryAddPacket(packet, mtuSize)) {
                 this.sendDatagram(ctx, datagram, curTime);
 
-                datagram = RakDatagramPacket.newInstance();
+                datagram = new RakDatagramPacket();
                 datagram.setSendTime(curTime);
                 if (!datagram.tryAddPacket(packet, mtuSize)) {
                     throw new IllegalArgumentException("Packet too large to fit in MTU (size: " + packet.getSize() + ", MTU: " + mtuSize + ")");
@@ -588,7 +586,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
     private void sendImmediate(ChannelHandlerContext ctx, EncapsulatedPacket[] packets) {
         long curTime = System.currentTimeMillis();
         for (EncapsulatedPacket packet : packets) {
-            RakDatagramPacket datagram = RakDatagramPacket.newInstance();
+            RakDatagramPacket datagram = new RakDatagramPacket();
             datagram.setSendTime(curTime);
             if (!datagram.tryAddPacket(packet, this.getMtu())) {
                 throw new IllegalArgumentException("Packet too large to fit in MTU (size: " + packet.getSize() + ", MTU: " + this.getMtu() + ")");
@@ -689,7 +687,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
         // Now create the packets.
         EncapsulatedPacket[] packets = new EncapsulatedPacket[buffers.length];
         for (int i = 0, parts = buffers.length; i < parts; i++) {
-            EncapsulatedPacket packet = EncapsulatedPacket.newInstance();
+            EncapsulatedPacket packet = new EncapsulatedPacket();
             packet.setBuffer(buffers[i]);
             packet.setNeedsBAS(true);
             packet.setOrderingChannel((short) orderingChannel);

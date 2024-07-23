@@ -17,7 +17,6 @@
 package org.cloudburstmc.netty.channel.raknet.packet;
 
 import io.netty.util.AbstractReferenceCounted;
-import io.netty.util.internal.ObjectPool;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,22 +25,11 @@ import static org.cloudburstmc.netty.channel.raknet.RakConstants.*;
 
 public class RakDatagramPacket extends AbstractReferenceCounted {
 
-    private static final ObjectPool<RakDatagramPacket> RECYCLER = ObjectPool.newPool(RakDatagramPacket::new);
-
-    private final ObjectPool.Handle<RakDatagramPacket> handle;
     private final List<EncapsulatedPacket> packets = new ArrayList<>();
     private byte flags = FLAG_VALID | FLAG_NEEDS_B_AND_AS;
     private long sendTime;
     private long nextSend;
     private int sequenceIndex = -1;
-
-    public static RakDatagramPacket newInstance() {
-        return RECYCLER.get();
-    }
-
-    private RakDatagramPacket(ObjectPool.Handle<RakDatagramPacket> handle) {
-        this.handle = handle;
-    }
 
     @Override
     public RakDatagramPacket retain() {
@@ -76,11 +64,6 @@ public class RakDatagramPacket extends AbstractReferenceCounted {
     }
 
     @Override
-    public boolean release() {
-        return super.release();
-    }
-
-    @Override
     protected void deallocate() {
         for (EncapsulatedPacket packet : this.packets) {
             packet.release();
@@ -90,8 +73,6 @@ public class RakDatagramPacket extends AbstractReferenceCounted {
         this.sendTime = 0;
         this.nextSend = 0;
         this.sequenceIndex = -1;
-        setRefCnt(1);
-        this.handle.recycle(this);
     }
 
     public int getSize() {
@@ -141,8 +122,7 @@ public class RakDatagramPacket extends AbstractReferenceCounted {
     @Override
     public String toString() {
         return "RakDatagramPacket{" +
-                "handle=" + handle +
-                ", packets=" + packets +
+                "packets=" + packets +
                 ", flags=" + flags +
                 ", sendTime=" + sendTime +
                 ", nextSend=" + nextSend +

@@ -16,18 +16,14 @@
 
 package org.cloudburstmc.netty.util;
 
-import io.netty.util.AbstractReferenceCounted;
-import io.netty.util.internal.ObjectPool;
-
 import java.util.Arrays;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 
-public class FastBinaryMinHeap<E> extends AbstractReferenceCounted {
+public class FastBinaryMinHeap<E> {
 
-    private static final Entry INFIMUM = new Entry(Long.MAX_VALUE);
-    private static final Entry SUPREMUM = new Entry(Long.MIN_VALUE);
-    private static final ObjectPool<Entry> RECYCLER = ObjectPool.newPool(Entry::new);
+    private static final Entry INFIMUM = new Entry(null, Long.MAX_VALUE);
+    private static final Entry SUPREMUM = new Entry(null, Long.MIN_VALUE);
     private int size;
 
     public FastBinaryMinHeap() {
@@ -40,14 +36,6 @@ public class FastBinaryMinHeap<E> extends AbstractReferenceCounted {
         this.heap = new Entry[++initialCapacity];
         Arrays.fill(this.heap, INFIMUM);
         this.heap[0] = SUPREMUM;
-    }
-
-    private static Entry newEntry(Object element, long weight) {
-        Entry entry = RECYCLER.get();
-        entry.element = element;
-        entry.weight = weight;
-
-        return entry;
     }
 
     private void resize(int capacity) {
@@ -92,7 +80,7 @@ public class FastBinaryMinHeap<E> extends AbstractReferenceCounted {
             predWeight = this.heap[pred].weight;
         }
 
-        this.heap[hole] = newEntry(element, weight);
+        this.heap[hole] = new Entry(element, weight);
     }
 
     public void insertSeries(long weight, E[] elements) {
@@ -118,7 +106,7 @@ public class FastBinaryMinHeap<E> extends AbstractReferenceCounted {
             for (E element : elements) {
                 Objects.requireNonNull(element, "element");
 
-                this.heap[++this.size] = newEntry(element, weight);
+                this.heap[++this.size] = new Entry(element, weight);
             }
         } else {
             for (E element : elements) {
@@ -146,7 +134,6 @@ public class FastBinaryMinHeap<E> extends AbstractReferenceCounted {
         if (this.size == 0) {
             throw new NoSuchElementException("Heap is empty");
         }
-        this.heap[1].release();
         int hole = 1;
         int succ = 2;
         int sz = this.size;
@@ -191,46 +178,13 @@ public class FastBinaryMinHeap<E> extends AbstractReferenceCounted {
         return this.size == 0;
     }
 
-    @Override
-    protected void deallocate() {
-        while (this.size > 0) {
-            Entry entry = this.heap[1];
-            this.remove();
-            entry.release();
-        }
-    }
+    private static class Entry {
+        private final Object element;
+        private final long weight;
 
-    @Override
-    public FastBinaryMinHeap<E> touch(Object hint) {
-        return this;
-    }
-
-    private static class Entry extends AbstractReferenceCounted {
-        private final ObjectPool.Handle<Entry> handle;
-        private Object element;
-        private long weight;
-
-        private Entry(long weight) {
+        private Entry(Object element, long weight) {
+            this.element = element;
             this.weight = weight;
-            this.handle = null;
-        }
-
-        private Entry(ObjectPool.Handle<Entry> handle) {
-            this.handle = handle;
-        }
-
-        @Override
-        protected void deallocate() {
-            setRefCnt(1);
-            if (handle == null) return;
-            this.element = null;
-            this.weight = 0;
-            this.handle.recycle(this);
-        }
-
-        @Override
-        public Entry touch(Object hint) {
-            return this;
         }
     }
 }
