@@ -16,44 +16,43 @@
 
 package org.cloudburstmc.netty.channel.raknet.config;
 
-import io.netty.channel.Channel;
 import org.cloudburstmc.netty.channel.raknet.RakState;
 
 public interface RakChannelMetrics {
 
-    default void bytesIn(Channel channel, int count) {
+    default void bytesIn(int count) {
     }
 
-    default void bytesOut(Channel channel, int count) {
+    default void bytesOut(int count) {
     }
 
-    default void rakDatagramsIn(Channel channel, int count) {
+    default void rakDatagramsIn(int count) {
     }
 
-    default void rakDatagramsOut(Channel channel, int count) {
+    default void rakDatagramsOut(int count) {
     }
 
-    default void encapsulatedIn(Channel channel, int count) {
+    default void encapsulatedIn(int count) {
     }
 
-    default void encapsulatedOut(Channel channel, int count) {
+    default void encapsulatedOut(int count) {
     }
 
-    default void rakStaleDatagrams(Channel channel, int count) {
+    default void rakStaleDatagrams(int count) {
     }
 
-    default void ackIn(Channel channel, int count) {
+    default void ackIn(int count) {
     }
 
-    default void ackOut(Channel channel, int count) {
+    default void ackOut(int count) {
     }
 
-    default void nackIn(Channel channel, int count) {
+    default void nackOut(int count) {
     }
 
-    default void nackOut(Channel channel, int count) {
+    default void nackIn(int count) {
     }
 
-    default void stateChange(Channel channel, RakState state) {
+    default void stateChange(RakState state) {
     }
 }

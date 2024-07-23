@@ -240,7 +240,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
             throw new IllegalArgumentException();
         }
 
-        getMetrics().encapsulatedOut(ctx.channel(), 1);
+        getMetrics().encapsulatedOut(1);
         EncapsulatedPacket[] packets = this.createEncapsulated(message);
         if (message.priority() == RakPriority.IMMEDIATE) {
             this.sendImmediate(ctx, packets);
@@ -259,7 +259,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
         this.touch();
         RakChannelMetrics metrics = this.getMetrics();
         if (metrics != null) {
-            metrics.rakDatagramsIn(ctx.channel(), 1);
+            metrics.rakDatagramsIn(1);
         }
 
         this.slidingWindow.onPacketReceived(packet.getSendTime());
@@ -317,14 +317,14 @@ public class RakSessionCodec extends ChannelDuplexHandler {
                     // Not reassembled
                     continue;
                 }
-                getMetrics().encapsulatedIn(ctx.channel(), 1);
+                getMetrics().encapsulatedIn(1);
                 try {
                     this.checkForOrdered(ctx, reassembled);
                 } finally {
                     reassembled.release();
                 }
             } else {
-                getMetrics().encapsulatedIn(ctx.channel(), 1);
+                getMetrics().encapsulatedIn(1);
                 this.checkForOrdered(ctx, encapsulated);
             }
         }
@@ -468,9 +468,9 @@ public class RakSessionCodec extends ChannelDuplexHandler {
 
         RakChannelMetrics metrics = this.getMetrics();
         if (metrics != null) {
-            metrics.nackOut(ctx.channel(), writtenNacks);
-            metrics.ackOut(ctx.channel(), writtenAcks);
-            metrics.rakStaleDatagrams(ctx.channel(), resendCount);
+            metrics.nackOut(writtenNacks);
+            metrics.ackOut(writtenAcks);
+            metrics.rakStaleDatagrams(resendCount);
         }
     }
 
@@ -613,7 +613,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
 
         RakChannelMetrics metrics = this.getMetrics();
         if (metrics != null) {
-            metrics.rakDatagramsOut(ctx.channel(), 1);
+            metrics.rakDatagramsOut(1);
         }
 
         int oldIndex = datagram.getSequenceIndex();
@@ -796,7 +796,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
 
         RakChannelMetrics metrics = this.getMetrics();
         if (metrics != null) {
-            metrics.stateChange(channel, state);
+            metrics.stateChange(state);
         }
     }
 

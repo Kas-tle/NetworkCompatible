@@ -51,7 +51,7 @@ public class RakServerRouteHandler extends ChannelDuplexHandler {
 
             RakChannelMetrics metrics = channel.config().getMetrics();
             if (metrics != null) {
-                metrics.bytesIn(ctx.channel(), packet.content().readableBytes());
+                metrics.bytesIn(packet.content().readableBytes());
             }
 
             // In this case remote address is already known from ChannelHandlerContext

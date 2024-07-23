@@ -43,7 +43,7 @@ public class RakClientProxyRouteHandler extends ChannelDuplexHandler {
         DatagramPacket packet = (DatagramPacket) msg;
         RakChannelMetrics metrics = this.channel.config().getMetrics();
         if (metrics != null) {
-            metrics.bytesIn(ctx.channel(), packet.content().readableBytes());
+            metrics.bytesIn(packet.content().readableBytes());
         }
 
         DatagramPacket datagram = packet.retain();
@@ -69,7 +69,7 @@ public class RakClientProxyRouteHandler extends ChannelDuplexHandler {
         DatagramPacket datagram = isDatagram ? (DatagramPacket) msg : new DatagramPacket((ByteBuf) msg, this.channel.remoteAddress());
         RakChannelMetrics metrics = this.channel.config().getMetrics();
         if (metrics != null) {
-            metrics.bytesOut(ctx.channel(), datagram.content().readableBytes());
+            metrics.bytesOut(datagram.content().readableBytes());
         }
 
         ctx.write(datagram, promise);

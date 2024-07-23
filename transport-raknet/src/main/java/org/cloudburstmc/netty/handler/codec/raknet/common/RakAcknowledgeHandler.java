@@ -82,9 +82,9 @@ public class RakAcknowledgeHandler extends SimpleChannelInboundHandler<ByteBuf> 
         RakChannelMetrics metrics = this.sessionCodec.getMetrics();
         if (metrics != null) {
             if (nack) {
-                metrics.nackIn(ctx.channel(), entriesCount);
+                metrics.nackIn(entriesCount);
             } else {
-                metrics.ackIn(ctx.channel(), entriesCount);
+                metrics.ackIn(entriesCount);
             }
         }
     }
