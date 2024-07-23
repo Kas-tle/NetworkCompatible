@@ -17,7 +17,9 @@
 package org.cloudburstmc.netty.handler.codec.raknet.client;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.*;
+import io.netty.channel.ChannelDuplexHandler;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPromise;
 import io.netty.channel.socket.DatagramPacket;
 import org.cloudburstmc.netty.channel.raknet.RakClientChannel;
 import org.cloudburstmc.netty.channel.raknet.config.RakChannelMetrics;
@@ -41,7 +43,7 @@ public class RakClientProxyRouteHandler extends ChannelDuplexHandler {
         DatagramPacket packet = (DatagramPacket) msg;
         RakChannelMetrics metrics = this.channel.config().getMetrics();
         if (metrics != null) {
-            metrics.bytesIn(packet.content().readableBytes());
+            metrics.bytesIn(ctx.channel(), packet.content().readableBytes());
         }
 
         DatagramPacket datagram = packet.retain();
@@ -67,7 +69,7 @@ public class RakClientProxyRouteHandler extends ChannelDuplexHandler {
         DatagramPacket datagram = isDatagram ? (DatagramPacket) msg : new DatagramPacket((ByteBuf) msg, this.channel.remoteAddress());
         RakChannelMetrics metrics = this.channel.config().getMetrics();
         if (metrics != null) {
-            metrics.bytesOut(datagram.content().readableBytes());
+            metrics.bytesOut(ctx.channel(), datagram.content().readableBytes());
         }
 
         ctx.write(datagram, promise);

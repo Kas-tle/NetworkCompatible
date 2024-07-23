@@ -48,7 +48,7 @@ public class RakChildDatagramHandler extends ChannelOutboundHandlerAdapter {
 
         RakChannelMetrics metrics = this.channel.config().getMetrics();
         if (metrics != null) {
-            metrics.bytesOut(datagram.content().readableBytes());
+            metrics.bytesOut(ctx.channel(), datagram.content().readableBytes());
         }
 
         Channel parent = this.channel.parent().parent();
