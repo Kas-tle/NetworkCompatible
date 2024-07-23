@@ -56,7 +56,9 @@ public class RakServerChannel extends ProxyChannel<DatagramChannel> implements S
         this.config = new DefaultRakServerConfig(this);
         // Default common handler of offline phase. Handles only raknet packets, forwards rest.
         this.pipeline().addLast(UnconnectedPongEncoder.NAME, UnconnectedPongEncoder.INSTANCE);
-        this.pipeline().addLast(RakServerRateLimiter.NAME, new RakServerRateLimiter(this));
+        if (this.config().getPacketLimit() > 0) { // No point in enabling this.
+            this.pipeline().addLast(RakServerRateLimiter.NAME, new RakServerRateLimiter(this));
+        }
         this.pipeline().addLast(RakServerOfflineHandler.NAME, new RakServerOfflineHandler(this));
         this.pipeline().addLast(RakServerRouteHandler.NAME, new RakServerRouteHandler(this));
         this.pipeline().addLast(RakServerTailHandler.NAME, RakServerTailHandler.INSTANCE);
