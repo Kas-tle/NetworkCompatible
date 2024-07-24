@@ -240,7 +240,10 @@ public class RakSessionCodec extends ChannelDuplexHandler {
             throw new IllegalArgumentException();
         }
 
-        getMetrics().encapsulatedOut(1);
+        RakChannelMetrics metrics = this.getMetrics();
+        if (metrics != null) {
+            metrics.encapsulatedOut(1);
+        }
         EncapsulatedPacket[] packets = this.createEncapsulated(message);
         if (message.priority() == RakPriority.IMMEDIATE) {
             this.sendImmediate(ctx, packets);
@@ -317,14 +320,18 @@ public class RakSessionCodec extends ChannelDuplexHandler {
                     // Not reassembled
                     continue;
                 }
-                getMetrics().encapsulatedIn(1);
+                if (metrics != null) {
+                    metrics.encapsulatedIn(1);
+                }
                 try {
                     this.checkForOrdered(ctx, reassembled);
                 } finally {
                     reassembled.release();
                 }
             } else {
-                getMetrics().encapsulatedIn(1);
+                if (metrics != null) {
+                    metrics.encapsulatedIn(1);
+                }
                 this.checkForOrdered(ctx, encapsulated);
             }
         }
