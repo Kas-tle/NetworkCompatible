@@ -22,6 +22,8 @@ import io.netty.channel.ServerChannel;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.PromiseCombiner;
+import io.netty.util.internal.logging.InternalLogger;
+import io.netty.util.internal.logging.InternalLoggerFactory;
 import org.cloudburstmc.netty.channel.proxy.ProxyChannel;
 import org.cloudburstmc.netty.channel.raknet.config.DefaultRakServerConfig;
 import org.cloudburstmc.netty.channel.raknet.config.RakServerChannelConfig;
@@ -41,6 +43,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public class RakServerChannel extends ProxyChannel<DatagramChannel> implements ServerChannel {
+
+    private static final InternalLogger log = InternalLoggerFactory.getInstance(RakServerChannel.class);
 
     private final RakServerChannelConfig config;
     private final Map<SocketAddress, RakChildChannel> childChannelMap = new ConcurrentHashMap<>();
@@ -115,6 +119,9 @@ public class RakServerChannel extends ProxyChannel<DatagramChannel> implements S
 
     @Override
     public void onCloseTriggered(ChannelPromise promise) {
+        if (log.isTraceEnabled()) {
+            log.trace("Closing RakServerChannel: {}", Thread.currentThread().getName(), new Throwable());
+        }
         PromiseCombiner combiner = new PromiseCombiner(this.eventLoop());
         this.childChannelMap.values().forEach(channel -> combiner.add(channel.close()));
 
