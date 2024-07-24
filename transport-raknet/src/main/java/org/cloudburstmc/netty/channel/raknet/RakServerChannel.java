@@ -71,7 +71,12 @@ public class RakServerChannel extends ProxyChannel<DatagramChannel> implements S
      * @return RakChildChannel instance of new channel.
      */
     public RakChildChannel createChildChannel(InetSocketAddress address, long clientGuid, int protocolVersion, int mtu) {
-        if (this.childChannelMap.containsKey(address)) {
+        RakChildChannel existingChannel = this.childChannelMap.get(address);
+        if (this.config().getSendCookie() && existingChannel != null) {
+            // We know this player is coming from this IP address due to the cookie, so we can safely close the existing channel.
+            existingChannel.close();
+        } else if (existingChannel != null) {
+            // Could be spoofed, so we don't close the existing channel.
             return null;
         }
 
