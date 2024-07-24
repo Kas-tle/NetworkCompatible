@@ -183,7 +183,7 @@ public class RakServerOfflineHandler extends AdvancedChannelInboundHandler<Datag
             cookie = 0;
         }
 
-        PendingConnection connection = this.pendingConnections.put(sender, new PendingConnection(protocolVersion, cookie));
+        PendingConnection connection = this.pendingConnections.putIfAbsent(sender, new PendingConnection(protocolVersion, cookie));
         if (connection != null && log.isTraceEnabled()) {
             log.trace("Received duplicate open connection request 1 from {}", sender);
         }
