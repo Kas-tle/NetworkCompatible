@@ -222,7 +222,7 @@ public class RakServerOfflineHandler extends AdvancedChannelInboundHandler<Datag
         boolean sendCookie = ((RakServerChannelConfig) ctx.channel().config()).getSendCookie();
         if (sendCookie) {
             int cookie = buffer.readInt();
-            int expectedCookie = connection.getCookie();
+            int expectedCookie = connection.cookie;
             if (expectedCookie != cookie) {
                 if (log.isTraceEnabled()) {
                     log.trace("[{}] Received ID_OPEN_CONNECTION_REQUEST_2 with invalid cookie (expected {}, but received {})",
@@ -253,7 +253,7 @@ public class RakServerOfflineHandler extends AdvancedChannelInboundHandler<Datag
         }
 
         RakServerChannel serverChannel = (RakServerChannel) ctx.channel();
-        RakChildChannel channel = serverChannel.createChildChannel(sender, clientGuid, connection.getProtocolVersion(), mtu);
+        RakChildChannel channel = serverChannel.createChildChannel(sender, clientGuid, connection.protocolVersion, mtu);
         if (channel == null) {
             if (log.isTraceEnabled()) {
                 log.trace("[{}] Received ID_OPEN_CONNECTION_REQUEST_2, but a channel already exists for this socket address",
@@ -291,21 +291,13 @@ public class RakServerOfflineHandler extends AdvancedChannelInboundHandler<Datag
         ctx.writeAndFlush(new DatagramPacket(buffer, sender));
     }
 
-    private class PendingConnection {
-        private final int protocolVersion;
-        private final int cookie;
+    private static class PendingConnection {
+        final int protocolVersion;
+        final int cookie;
 
         public PendingConnection(int protocolVersion, int cookie) {
             this.protocolVersion = protocolVersion;
             this.cookie = cookie;
-        }
-
-        public int getProtocolVersion() {
-            return this.protocolVersion;
-        }
-
-        public int getCookie() {
-            return this.cookie;
         }
     }
 }
