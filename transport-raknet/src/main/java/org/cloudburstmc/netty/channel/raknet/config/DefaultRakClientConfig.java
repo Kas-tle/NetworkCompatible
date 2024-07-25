@@ -27,6 +27,7 @@ import java.util.Map;
 import static org.cloudburstmc.netty.channel.raknet.RakConstants.DEFAULT_UNCONNECTED_MAGIC;
 import static org.cloudburstmc.netty.channel.raknet.RakConstants.MTU_SIZES;
 import static org.cloudburstmc.netty.channel.raknet.RakConstants.SESSION_TIMEOUT_MS;
+import static org.cloudburstmc.netty.channel.raknet.RakConstants.TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS;
 
 /**
  * The extended implementation of {@link RakChannelConfig} based on {@link DefaultRakSessionConfig} used by client.
@@ -41,6 +42,7 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
     private volatile Integer[] mtuSizes = MTU_SIZES;
     private volatile boolean ipDontFragment = false;
     private volatile int clientInternalAddresses = 10;
+    private volatile int timeBetweenSendConnectionAttemptsMS = TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS;
 
     public DefaultRakClientConfig(Channel channel) {
         super(channel);
@@ -51,7 +53,7 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
         return this.getOptions(
             super.getOptions(), 
             RakChannelOption.RAK_UNCONNECTED_MAGIC, RakChannelOption.RAK_CONNECT_TIMEOUT, RakChannelOption.RAK_REMOTE_GUID, RakChannelOption.RAK_SESSION_TIMEOUT, RakChannelOption.RAK_COMPATIBILITY_MODE,
-            RakChannelOption.RAK_MTU_SIZES, RakChannelOption.RAK_IP_DONT_FRAGMENT, RakChannelOption.RAK_CLIENT_INTERNAL_ADDRESSES);
+            RakChannelOption.RAK_MTU_SIZES, RakChannelOption.RAK_IP_DONT_FRAGMENT, RakChannelOption.RAK_CLIENT_INTERNAL_ADDRESSES, RakChannelOption.RAK_TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS);
     }
 
     @SuppressWarnings("unchecked")
@@ -73,6 +75,8 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
             return (T) Boolean.valueOf(this.ipDontFragment);
         } else if (option == RakChannelOption.RAK_CLIENT_INTERNAL_ADDRESSES) {
             return (T) Integer.valueOf(this.clientInternalAddresses);
+        } else if (option == RakChannelOption.RAK_TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS) {
+            return (T) Integer.valueOf(this.timeBetweenSendConnectionAttemptsMS);
         }
         return super.getOption(option);
     }
@@ -104,6 +108,9 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
             return (Boolean) value == this.isIpDontFragment();
         } else if (option == RakChannelOption.RAK_CLIENT_INTERNAL_ADDRESSES) {
             this.setClientInternalAddresses((Integer) value);
+            return true;
+        } else if (option == RakChannelOption.RAK_TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS) {
+            this.setTimeBetweenSendConnectionAttemptsMS((Integer) value);
             return true;
         }
         return super.setOption(option, value);
@@ -180,5 +187,13 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
 
     public void setClientInternalAddresses(int clientInternalAddresses) {
         this.clientInternalAddresses = clientInternalAddresses;
+    }
+
+    public int getTimeBetweenSendConnectionAttemptsMS() {
+        return this.timeBetweenSendConnectionAttemptsMS;
+    }
+
+    public void setTimeBetweenSendConnectionAttemptsMS(int timeBetweenSendConnectionAttemptsMS) {
+        this.timeBetweenSendConnectionAttemptsMS = timeBetweenSendConnectionAttemptsMS;
     }
 }
