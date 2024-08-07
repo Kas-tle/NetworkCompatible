@@ -20,6 +20,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageCodec;
+import io.netty.util.internal.logging.InternalLogger;
+import io.netty.util.internal.logging.InternalLoggerFactory;
 import org.cloudburstmc.netty.channel.raknet.packet.EncapsulatedPacket;
 import org.cloudburstmc.netty.channel.raknet.packet.RakDatagramPacket;
 
@@ -29,6 +31,8 @@ import static org.cloudburstmc.netty.channel.raknet.RakConstants.*;
 
 public class RakDatagramCodec extends MessageToMessageCodec<ByteBuf, RakDatagramPacket> {
     public static final String NAME = "rak-datagram-codec";
+
+    private static final InternalLogger log = InternalLoggerFactory.getInstance(RakDatagramCodec.class);
 
     public RakDatagramCodec() {
     }
@@ -73,6 +77,9 @@ public class RakDatagramCodec extends MessageToMessageCodec<ByteBuf, RakDatagram
                 try {
                     encapsulated.decode(buffer);
                     packet.getPackets().add(encapsulated.retain());
+                } catch (Throwable t) {
+                    log.error("Error decoding encapsulated packet", t); // TODO: this is just temporary for debugging
+                    throw t;
                 } finally {
                     encapsulated.release();
                 }
