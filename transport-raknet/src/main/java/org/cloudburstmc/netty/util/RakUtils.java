@@ -20,6 +20,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.DefaultChannelPipeline;
+import io.netty.channel.socket.DatagramPacket;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -185,5 +186,9 @@ public class RakUtils {
         value |= value >> 16;
         value++;
         return value;
+    }
+
+    public static DatagramPacket datagramReply(ByteBuf buf, DatagramPacket request) {
+        return new DatagramPacket(buf, request.sender(), request.recipient());
     }
 }

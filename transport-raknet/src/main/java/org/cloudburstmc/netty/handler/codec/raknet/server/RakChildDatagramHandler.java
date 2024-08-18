@@ -44,7 +44,8 @@ public class RakChildDatagramHandler extends ChannelOutboundHandlerAdapter {
 
         this.canFlush = true;
         promise.trySuccess();
-        DatagramPacket datagram = isDatagram ? (DatagramPacket) msg : new DatagramPacket((ByteBuf) msg, this.channel.remoteAddress());
+        DatagramPacket datagram = isDatagram ? (DatagramPacket) msg :
+                new DatagramPacket((ByteBuf) msg, this.channel.remoteAddress(), this.channel.localAddress());
 
         RakChannelMetrics metrics = this.channel.config().getMetrics();
         if (metrics != null) {
