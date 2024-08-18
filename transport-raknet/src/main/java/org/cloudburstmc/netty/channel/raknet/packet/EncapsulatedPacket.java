@@ -20,12 +20,16 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.util.AbstractReferenceCounted;
+import io.netty.util.internal.ObjectPool;
 import io.netty.util.ReferenceCountUtil;
 import org.cloudburstmc.netty.channel.raknet.RakConstants;
 import org.cloudburstmc.netty.channel.raknet.RakReliability;
 
 public class EncapsulatedPacket extends AbstractReferenceCounted {
 
+    private static final ObjectPool<EncapsulatedPacket> RECYCLER = ObjectPool.newPool(EncapsulatedPacket::new);
+
+    private final ObjectPool.Handle<EncapsulatedPacket> handle;
     private RakReliability reliability;
     private int reliabilityIndex;
     private int sequenceIndex;
@@ -37,6 +41,14 @@ public class EncapsulatedPacket extends AbstractReferenceCounted {
     private int partIndex;
     private ByteBuf buffer;
     private boolean needsBAS;
+
+    public static EncapsulatedPacket newInstance() {
+        return RECYCLER.get();
+    }
+
+    private EncapsulatedPacket(ObjectPool.Handle<EncapsulatedPacket> handle) {
+        this.handle = handle;
+    }
 
     public void encode(CompositeByteBuf buffer) {
         RakReliability reliability = this.reliability;
@@ -111,7 +123,7 @@ public class EncapsulatedPacket extends AbstractReferenceCounted {
     }
 
     public EncapsulatedPacket fromSplit(ByteBuf reassembled) {
-        EncapsulatedPacket packet = new EncapsulatedPacket();
+        EncapsulatedPacket packet = newInstance();
         packet.reliability = this.reliability;
         packet.reliabilityIndex = this.reliabilityIndex;
         packet.sequenceIndex = this.sequenceIndex;
@@ -135,6 +147,8 @@ public class EncapsulatedPacket extends AbstractReferenceCounted {
         this.partId = 0;
         this.partIndex = 0;
         this.buffer = null;
+        setRefCnt(1);
+        this.handle.recycle(this);
     }
 
     @Override
