@@ -189,6 +189,12 @@ public class RakChannelOption<T> extends ChannelOption<T> {
     public static final ChannelOption<Integer> RAK_TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS =
             valueOf(RakChannelOption.class, "RAK_TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS");
 
+    /**
+     * The protocol version of the RakNet client for sending RequestNetworkSettingsPacket in compatibility mode.
+     */
+    public static final ChannelOption<Integer> RAK_CLIENT_BEDROCK_PROTOCOL_VERSION =
+            valueOf(RakChannelOption.class, "RAK_CLIENT_BEDROCK_PROTOCOL_VERSION");
+
     @SuppressWarnings("deprecation")
     protected RakChannelOption() {
         super(null);

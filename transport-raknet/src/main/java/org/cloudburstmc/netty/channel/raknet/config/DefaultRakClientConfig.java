@@ -43,6 +43,7 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
     private volatile boolean ipDontFragment = false;
     private volatile int clientInternalAddresses = 10;
     private volatile int timeBetweenSendConnectionAttemptsMS = TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS;
+    private volatile int bedrockProtocolVersion;
 
     public DefaultRakClientConfig(Channel channel) {
         super(channel);
@@ -53,7 +54,8 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
         return this.getOptions(
             super.getOptions(), 
             RakChannelOption.RAK_UNCONNECTED_MAGIC, RakChannelOption.RAK_CONNECT_TIMEOUT, RakChannelOption.RAK_REMOTE_GUID, RakChannelOption.RAK_SESSION_TIMEOUT, RakChannelOption.RAK_COMPATIBILITY_MODE,
-            RakChannelOption.RAK_MTU_SIZES, RakChannelOption.RAK_IP_DONT_FRAGMENT, RakChannelOption.RAK_CLIENT_INTERNAL_ADDRESSES, RakChannelOption.RAK_TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS);
+            RakChannelOption.RAK_MTU_SIZES, RakChannelOption.RAK_IP_DONT_FRAGMENT, RakChannelOption.RAK_CLIENT_INTERNAL_ADDRESSES, RakChannelOption.RAK_TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS,
+            RakChannelOption.RAK_CLIENT_BEDROCK_PROTOCOL_VERSION);
     }
 
     @SuppressWarnings("unchecked")
@@ -77,6 +79,8 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
             return (T) Integer.valueOf(this.clientInternalAddresses);
         } else if (option == RakChannelOption.RAK_TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS) {
             return (T) Integer.valueOf(this.timeBetweenSendConnectionAttemptsMS);
+        } else if (option == RakChannelOption.RAK_CLIENT_BEDROCK_PROTOCOL_VERSION) {
+            return (T) Integer.valueOf(this.bedrockProtocolVersion);
         }
         return super.getOption(option);
     }
@@ -111,6 +115,9 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
             return true;
         } else if (option == RakChannelOption.RAK_TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS) {
             this.setTimeBetweenSendConnectionAttemptsMS((Integer) value);
+            return true;
+        } else if (option == RakChannelOption.RAK_CLIENT_BEDROCK_PROTOCOL_VERSION) {
+            this.setBedrockProtocolVersion((Integer) value);
             return true;
         }
         return super.setOption(option, value);
@@ -195,5 +202,13 @@ public class DefaultRakClientConfig extends DefaultRakSessionConfig {
 
     public void setTimeBetweenSendConnectionAttemptsMS(int timeBetweenSendConnectionAttemptsMS) {
         this.timeBetweenSendConnectionAttemptsMS = timeBetweenSendConnectionAttemptsMS;
+    }
+
+    public int getBedrockProtocolVersion() {
+        return this.bedrockProtocolVersion;
+    }
+
+    public void setBedrockProtocolVersion(int bedrockProtocolVersion) {
+        this.bedrockProtocolVersion = bedrockProtocolVersion;
     }
 }

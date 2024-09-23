@@ -58,7 +58,7 @@ public class RakClientOnlineInitialHandler extends SimpleChannelInboundHandler<E
         buffer.writeLong(guid);
         buffer.writeLong(System.currentTimeMillis());
         buffer.writeBoolean(false);
-        ctx.writeAndFlush(new RakMessage(buffer, RakReliability.RELIABLE_ORDERED, RakPriority.IMMEDIATE));
+        ctx.writeAndFlush(new RakMessage(buffer, RakReliability.RELIABLE, RakPriority.IMMEDIATE));
     }
 
     private void onSuccess(ChannelHandlerContext ctx) {
@@ -114,14 +114,30 @@ public class RakClientOnlineInitialHandler extends SimpleChannelInboundHandler<E
         pingTime = buf.readLong();
         buf.readLong();
 
-        ByteBuf buffer = ctx.alloc().ioBuffer();
-        buffer.writeByte(ID_NEW_INCOMING_CONNECTION);
-        RakUtils.writeAddress(buffer, (InetSocketAddress) ctx.channel().remoteAddress());
+        ByteBuf incomingBuffer = ctx.alloc().ioBuffer();
+        incomingBuffer.writeByte(ID_NEW_INCOMING_CONNECTION);
+        RakUtils.writeAddress(incomingBuffer, (InetSocketAddress) ctx.channel().remoteAddress());
         for (int i = 0; i < this.rakChannel.config().getOption(RakChannelOption.RAK_CLIENT_INTERNAL_ADDRESSES); i++) {
-            RakUtils.writeAddress(buffer, LOCAL_ADDRESS);
+            RakUtils.writeAddress(incomingBuffer, LOCAL_ADDRESS);
         }
-        buffer.writeLong(pingTime);
-        buffer.writeLong(System.currentTimeMillis());
-        ctx.writeAndFlush(new RakMessage(buffer, RakReliability.RELIABLE_ORDERED, RakPriority.IMMEDIATE));
+        incomingBuffer.writeLong(pingTime);
+        incomingBuffer.writeLong(System.currentTimeMillis());
+        ctx.write(new RakMessage(incomingBuffer, RakReliability.RELIABLE_ORDERED, RakPriority.NORMAL));
+
+        if (compatibilityMode) {
+            ByteBuf pingBuffer = ctx.alloc().ioBuffer();
+            pingBuffer.writeByte(ID_CONNECTED_PING);
+            pingBuffer.writeLong(System.currentTimeMillis());
+            ctx.write(new RakMessage(pingBuffer, RakReliability.UNRELIABLE, RakPriority.NORMAL));
+
+            ByteBuf netSettingsBuffer = ctx.alloc().ioBuffer();
+            netSettingsBuffer.writeByte(ID_GAME_PACKET);
+            netSettingsBuffer.writeByte(0x06); // length
+            netSettingsBuffer.writeByte(0xc1).writeByte(0x01); // Request network settings packet
+            netSettingsBuffer.writeInt(this.rakChannel.config().getOption(RakChannelOption.RAK_CLIENT_BEDROCK_PROTOCOL_VERSION));
+            ctx.write(new RakMessage(netSettingsBuffer, RakReliability.RELIABLE_ORDERED, RakPriority.NORMAL));
+        }
+
+        ctx.flush();
     }
 }
