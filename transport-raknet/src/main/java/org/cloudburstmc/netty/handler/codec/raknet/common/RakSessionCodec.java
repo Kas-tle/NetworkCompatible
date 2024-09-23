@@ -119,7 +119,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
         boolean autoFlush = this.channel.config().isAutoFlush();
         // Make sure there happens at least one flush per 10ms to respect standard RakNet behavior
         int flushInterval = autoFlush ? this.channel.config().getFlushInterval() : 10;
-        this.tickFuture = ctx.channel().eventLoop().scheduleAtFixedRate(this::tryTick, 2000, flushInterval, TimeUnit.MILLISECONDS);
+        this.tickFuture = ctx.channel().eventLoop().scheduleAtFixedRate(this::tryTick, 0, flushInterval, TimeUnit.MILLISECONDS);
 
         ctx.fireChannelActive(); // fire channel active on rakPipeline()
     }

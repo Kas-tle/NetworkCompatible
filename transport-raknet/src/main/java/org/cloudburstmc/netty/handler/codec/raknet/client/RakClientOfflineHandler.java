@@ -76,14 +76,12 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
     }
 
     private void onRetryAttempt(Channel channel) {
-        switch (this.state) {
-            case HANDSHAKE_1:
-                this.sendOpenConnectionRequest1(channel);
-                this.connectionAttempts++;
-                break;
-            case HANDSHAKE_2:
-                this.sendOpenConnectionRequest2(channel);
-                break;
+        this.sendOpenConnectionRequest1(channel);
+
+        if (this.state == RakOfflineState.HANDSHAKE_2) {
+            this.sendOpenConnectionRequest2(channel);
+        } else {
+            this.connectionAttempts++;
         }
     }
 
