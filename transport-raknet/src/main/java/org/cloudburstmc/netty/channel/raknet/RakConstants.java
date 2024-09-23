@@ -43,6 +43,8 @@ public class RakConstants {
     public static final int RAKNET_DATAGRAM_HEADER_SIZE = 4;
 
     public static final int MAXIMUM_CONNECTION_ATTEMPTS = 10;
+
+    public static final int TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS = 1000;
     /**
      * Time after {@link RakSessionCodec} is closed due to no activity.
      */

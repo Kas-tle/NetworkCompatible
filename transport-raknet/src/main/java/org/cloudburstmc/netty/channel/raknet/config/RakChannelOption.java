@@ -182,6 +182,13 @@ public class RakChannelOption<T> extends ChannelOption<T> {
     public static final ChannelOption<Integer> RAK_CLIENT_INTERNAL_ADDRESSES =
             valueOf(RakChannelOption.class, "RAK_CLIENT_INTERNAL_ADDRESSES");
 
+
+    /**
+     * The time between the client sending connection attempts in milliseconds.
+     */
+    public static final ChannelOption<Integer> RAK_TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS =
+            valueOf(RakChannelOption.class, "RAK_TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS");
+
     @SuppressWarnings("deprecation")
     protected RakChannelOption() {
         super(null);

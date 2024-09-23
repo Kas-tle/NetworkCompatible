@@ -57,7 +57,8 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
         Channel channel = ctx.channel();
         long timeout = this.rakChannel.config().getOption(RakChannelOption.RAK_CONNECT_TIMEOUT);
         this.timeoutFuture = channel.eventLoop().schedule(this::onTimeout, timeout, TimeUnit.MILLISECONDS);
-        this.retryFuture = channel.eventLoop().scheduleAtFixedRate(() -> this.onRetryAttempt(channel), 0, 1, TimeUnit.SECONDS);
+        this.retryFuture = channel.eventLoop().scheduleAtFixedRate(() -> this.onRetryAttempt(channel), 0,
+            this.rakChannel.config().getOption(RakChannelOption.RAK_TIME_BETWEEN_SEND_CONNECTION_ATTEMPTS_MS), TimeUnit.MILLISECONDS);
         this.successPromise.addListener(future -> safeCancel(this.timeoutFuture, channel));
         this.successPromise.addListener(future -> safeCancel(this.retryFuture, channel));
 
