@@ -76,12 +76,21 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
     }
 
     private void onRetryAttempt(Channel channel) {
-        this.sendOpenConnectionRequest1(channel);
-
-        if (this.state == RakOfflineState.HANDSHAKE_2) {
-            this.sendOpenConnectionRequest2(channel);
+        if (this.rakChannel.config().getOption(RakChannelOption.RAK_COMPATIBILITY_MODE)) {
+            if (this.state != RakOfflineState.HANDSHAKE_COMPLETED) {
+                this.sendOpenConnectionRequest1(channel);
+                this.connectionAttempts++;
+            }
         } else {
-            this.connectionAttempts++;
+            switch (this.state) {
+                case HANDSHAKE_1:
+                    this.sendOpenConnectionRequest1(channel);
+                    this.connectionAttempts++;
+                    break;
+                case HANDSHAKE_2:
+                    this.sendOpenConnectionRequest2(channel);
+                    break;
+            }
         }
     }
 
@@ -156,6 +165,8 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
         if (security) {
             this.cookie = buffer.readInt();
             this.security = true;
+        } else {
+            this.security = false;
         }
         int mtu = buffer.readShort();
 
