@@ -110,7 +110,7 @@ public class RakServerRateLimiter extends SimpleChannelInboundHandler<DatagramPa
         log.info("Unblocked address {}", address);
 
         if (this.channel.config().getMetrics() != null) {
-            this.channel.config().getMetrics().addressBlocked(address);
+            this.channel.config().getMetrics().addressUnblocked(address);
         }
     }
 
