@@ -2,7 +2,7 @@
 
 ## Introduction
 
-You can join the [Discord](https://discord.gg/5z4GuSnqmQ) for help with this fork. This is a fork of [CloudburstMC/Network](https://github.com/CloudburstMC/Network) with a focus on improving the compatibility of the clinet side of the library to more closely align with the vanilla Minecraft Bedrock client.
+You can join the [Discord](https://discord.gg/5z4GuSnqmQ) for help with this fork. This is a fork of [CloudburstMC/Network](https://github.com/CloudburstMC/Network) with a focus on improving the compatibility of the client side of the library to more closely align with the vanilla Minecraft Bedrock client.
 
 ## Changes from Original Library
 
