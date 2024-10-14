@@ -14,12 +14,17 @@
  * under the License.
  */
 
+plugins {
+    alias(libs.plugins.nmcp)
+}
+
 subprojects {
     apply(plugin = "java-library")
     apply(plugin = "maven-publish")
+    apply(plugin = "com.gradleup.nmcp")
     apply(plugin = "signing")
 
-    group = "org.cloudburstmc.netty"
+    group = "dev.kastle.netty"
     version = rootProject.property("version") as String
 
     repositories {
@@ -36,19 +41,6 @@ subprojects {
     }
 
     configure<PublishingExtension> {
-        repositories {
-            maven {
-                name = "maven-deploy"
-                url = uri(
-                        System.getenv("MAVEN_DEPLOY_URL")
-                                ?: "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
-                )
-                credentials {
-                    username = System.getenv("MAVEN_DEPLOY_USERNAME") ?: "username"
-                    password = System.getenv("MAVEN_DEPLOY_PASSWORD") ?: "password"
-                }
-            }
-        }
         publications {
             create<MavenPublication>("maven") {
                 artifactId = "netty-${project.name}"
@@ -57,7 +49,7 @@ subprojects {
 
                 pom {
                     description.set(project.description)
-                    url.set("https://github.com/CloudburstMC/Network")
+                    url.set("https://github.com/Kas-tle/NetworkCompatible")
                     inceptionYear.set("2018")
                     licenses {
                         license {
@@ -67,23 +59,23 @@ subprojects {
                     }
                     developers {
                         developer {
-                            name.set("CloudburstMC Team")
-                            organization.set("CloudburstMC")
-                            organizationUrl.set("https://github.com/CloudburstMC")
+                            name.set("Kas-tle")
+                            organization.set("Kas-tle")
+                            organizationUrl.set("https://github.com/Kas-tle")
                         }
                     }
                     scm {
-                        connection.set("scm:git:git://github.com/CloudburstMC/Network.git")
-                        developerConnection.set("scm:git:ssh://github.com:CloudburstMC/my-library.git")
-                        url.set("https://github.com/CloudburstMC/Network")
+                        connection.set("scm:git:git://github.com/Kas-tle/NetworkCompatible.git")
+                        developerConnection.set("scm:git:ssh://github.com:Kas-tle/NetworkCompatible.git")
+                        url.set("https://github.com/Kas-tle/NetworkCompatible")
                     }
                     ciManagement {
                         system.set("GitHub Actions")
-                        url.set("https://github.com/CloudburstMC/Network/actions")
+                        url.set("https://github.com/Kas-tle/NetworkCompatible/actions")
                     }
                     issueManagement {
                         system.set("GitHub Issues")
-                        url.set("https://github.com/CloudburstMC/Network/issues")
+                        url.set("https://github.com/Kas-tle/NetworkCompatible/issues")
                     }
                 }
             }
@@ -97,6 +89,13 @@ subprojects {
         }
     }
 
+    nmcp {
+        publishAllPublications {
+            username.set(System.getenv("MAVEN_CENTRAL_USERNAME") ?: "username")
+            password.set(System.getenv("MAVEN_CENTRAL_PASSWORD") ?: "password")
+        }
+    }
+
     tasks {
         named<JavaCompile>("compileJava") {
             options.encoding = "UTF-8"
@@ -107,5 +106,17 @@ subprojects {
             jvmArgs = listOf("-XX:MaxMetaspaceSize=512m")
             useJUnitPlatform()
         }
+    }
+}
+
+
+nmcp {
+    publishAggregation {
+        project(":transport-raknet")
+
+        username.set(System.getenv("MAVEN_CENTRAL_USERNAME") ?: "username")
+        password.set(System.getenv("MAVEN_CENTRAL_PASSWORD") ?: "password")
+
+        publicationType.set("USER_MANAGED")
     }
 }
