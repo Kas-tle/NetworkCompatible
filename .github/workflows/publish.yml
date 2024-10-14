@@ -26,7 +26,7 @@ jobs:
         run: echo "version=$(cat gradle.properties | grep version= | cut -d'=' -f2)" >> $GITHUB_OUTPUT
       - name: Make Release Publication
         id: release
-        uses: Kas-tle/base-release-action@93220de508d78ab7c98e8802ca8afa3a7a30bb02
+        uses: Kas-tle/base-release-action@65d06f835be34757c6d73c16959c97e92c2a3c7f
         with:
           files: |
             transport-raknet/build/libs/*.jar
