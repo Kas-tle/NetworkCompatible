@@ -10,6 +10,8 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    outputs:
+        release_id: ${{ steps.release.outputs.releaseID }}
     steps:
       - uses: Kas-tle/NetworkCompatible/.github/setup-gradle-composite@master
       - name: Publish
@@ -23,7 +25,7 @@ jobs:
         id: version
         run: echo "version=$(cat gradle.properties | grep version= | cut -d'=' -f2)" >> $GITHUB_OUTPUT
       - name: Make Release Publication
-        id: publish
+        id: release
         uses: Kas-tle/base-release-action@e2c32c8ad0c00ec21b8a26038689d71776ccb8e9
         with:
           files: |
