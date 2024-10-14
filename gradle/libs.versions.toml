@@ -24,4 +24,4 @@ junit = [ "junit-jupiter-engine", "junit-jupiter-api", "junit-jupiter-params" ]
 
 
 [plugins]
-nmcp = { id = "com.gradleup.nmcp", version = "0.0.8" }
+nmcp = { id = "com.gradleup.nmcp", version = "0.0.9" }

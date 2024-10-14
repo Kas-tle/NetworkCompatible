@@ -16,12 +16,13 @@
 
 plugins {
     alias(libs.plugins.nmcp)
+    `maven-publish`
 }
 
 subprojects {
     apply(plugin = "java-library")
-    apply(plugin = "maven-publish")
     apply(plugin = "com.gradleup.nmcp")
+    apply(plugin = "maven-publish")
     apply(plugin = "signing")
 
     group = "dev.kastle.netty"
@@ -89,13 +90,6 @@ subprojects {
         }
     }
 
-    nmcp {
-        publishAllPublications {
-            username.set(System.getenv("MAVEN_CENTRAL_USERNAME") ?: "username")
-            password.set(System.getenv("MAVEN_CENTRAL_PASSWORD") ?: "password")
-        }
-    }
-
     tasks {
         named<JavaCompile>("compileJava") {
             options.encoding = "UTF-8"
@@ -106,6 +100,10 @@ subprojects {
             jvmArgs = listOf("-XX:MaxMetaspaceSize=512m")
             useJUnitPlatform()
         }
+    }
+
+    nmcp {
+        publishAllPublications {}
     }
 }
 
