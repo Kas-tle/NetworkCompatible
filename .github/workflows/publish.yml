@@ -26,7 +26,7 @@ jobs:
         run: echo "version=$(cat gradle.properties | grep version= | cut -d'=' -f2)" >> $GITHUB_OUTPUT
       - name: Make Release Publication
         id: release
-        uses: Kas-tle/base-release-action@e2c32c8ad0c00ec21b8a26038689d71776ccb8e9
+        uses: Kas-tle/base-release-action@93220de508d78ab7c98e8802ca8afa3a7a30bb02
         with:
           files: |
             transport-raknet/build/libs/*.jar
@@ -38,6 +38,10 @@ jobs:
           tagSeparator: ''
           tagPrefix: ''
           releaseName: ${{ steps.version.outputs.version }}
+          releaseBodyDependencyUsage: 'java'
+          releaseBodyDependencyJavaGroupId: 'dev.kastle.netty'
+          releaseBodyDependencyJavaArtifactId: 'netty-transport-raknet'
+
   upload-logs:
     name: Upload Logs
     runs-on: ubuntu-latest
