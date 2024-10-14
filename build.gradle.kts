@@ -115,6 +115,6 @@ nmcp {
         username.set(System.getenv("MAVEN_CENTRAL_USERNAME") ?: "username")
         password.set(System.getenv("MAVEN_CENTRAL_PASSWORD") ?: "password")
 
-        publicationType.set("USER_MANAGED")
+        publicationType.set("AUTOMATIC")
     }
 }
