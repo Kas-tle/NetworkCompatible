@@ -2,7 +2,7 @@
 
 ## Introduction
 
-A fork of [CloudburstMC/Network](https://github.com/CloudburstMC/Network) with a focus on improving the compatibility of the clinet side of the library to more closely align with the vanilla Minecraft Bedrock client.
+You can join the [Discord](https://discord.gg/5z4GuSnqmQ) for help with this fork. This is a fork of [CloudburstMC/Network](https://github.com/CloudburstMC/Network) with a focus on improving the compatibility of the clinet side of the library to more closely align with the vanilla Minecraft Bedrock client.
 
 ## Changes from Original Library
 
@@ -11,6 +11,7 @@ A fork of [CloudburstMC/Network](https://github.com/CloudburstMC/Network) with a
   - The first game packet, `Request Network Settings Packet`
 - Allows for resetting security state if `Open Connection Reply 1` is resent by the server
 - Only do retries with `Open Connection Request 1`, and reserve `Open Connection Request 2` only as a direct response to `Open Connection Reply 1`
+- Allows using datagram channel factories for raknet (from [@AlexProgrammerDE](https://github.com/AlexProgrammerDE))
 
 ## Usage
 
