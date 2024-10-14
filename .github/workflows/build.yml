@@ -6,7 +6,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: ./.github/composite/gradle.yml@master
+      - uses: Kas-tle/NetworkCompatible/.github/setup-gradle-composite@master
       - name: Build
         run: ./gradlew build
       - name: Archive Artifacts
