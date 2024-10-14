@@ -49,9 +49,9 @@ subprojects {
                 from(components["java"])
 
                 pom {
-                    description.set(project.description)
+                    description.set(project.name)
                     url.set("https://github.com/Kas-tle/NetworkCompatible")
-                    inceptionYear.set("2018")
+                    inceptionYear.set("2024")
                     licenses {
                         license {
                             name.set("The Apache License, Version 2.0")

@@ -22,8 +22,8 @@ jobs:
       - name: Get Version
         id: version
         run: echo "version=$(cat gradle.properties | grep version= | cut -d'=' -f2)" >> $GITHUB_OUTPUT
-      - name: Make release
-        id: release
+      - name: Make Release Publication
+        id: publish
         uses: Kas-tle/base-release-action@e2c32c8ad0c00ec21b8a26038689d71776ccb8e9
         with:
           files: |
@@ -36,3 +36,13 @@ jobs:
           tagSeparator: ''
           tagPrefix: ''
           releaseName: ${{ steps.version.outputs.version }}
+  upload-logs:
+    name: Upload Logs
+    runs-on: ubuntu-latest
+    needs: publish
+
+    steps:
+    - uses: Kas-tle/release-build-log-action@1b57448eaf9476e6e05450e4ea240449eac2c0d2
+      with:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        releaseID: ${{ needs.publish.outputs.release_id }}
