@@ -5,7 +5,9 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import io.netty.util.AttributeKey;
-import org.cloudburstmc.netty.channel.raknet.RakClientChannel;
+import io.netty.util.internal.logging.InternalLogger;
+import io.netty.util.internal.logging.InternalLoggerFactory;
+import org.cloudburstmc.netty.channel.raknet.RakChannel;
 import org.cloudburstmc.netty.channel.raknet.config.RakChannelOption;
 
 import static org.cloudburstmc.netty.channel.raknet.RakConstants.ID_GAME_PACKET;
@@ -13,10 +15,11 @@ import static org.cloudburstmc.netty.channel.raknet.RakConstants.ID_GAME_PACKET;
 public class RakClientNetworkSettingsHandler extends ChannelOutboundHandlerAdapter {
     public static final String NAME = "rak-client-network-settings-handler";
     public static final AttributeKey<ByteBuf> NETWORK_SETTINGS_PAYLOAD = AttributeKey.valueOf("network-settings-payload");
+    private static final InternalLogger log = InternalLoggerFactory.getInstance(RakClientNetworkSettingsHandler.class);
 
-    private final RakClientChannel channel;
+    private final RakChannel channel;
 
-    public RakClientNetworkSettingsHandler(RakClientChannel channel) {
+    public RakClientNetworkSettingsHandler(RakChannel channel) {
         this.channel = channel;
     }
 
@@ -68,6 +71,7 @@ public class RakClientNetworkSettingsHandler extends ChannelOutboundHandlerAdapt
     }
 
     private void onNetworkSettings(ChannelHandlerContext ctx, ByteBuf packet) {
+        log.info("Detected network settings packet, removing handler");
         ctx.channel().attr(NETWORK_SETTINGS_PAYLOAD).set(packet.retain());
         ctx.channel().pipeline().remove(RakClientNetworkSettingsHandler.NAME);
     }
