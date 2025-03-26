@@ -104,6 +104,9 @@ public class RakClientOfflineHandler extends SimpleChannelInboundHandler<ByteBuf
         ctx.pipeline().addAfter(NAME, RakDatagramCodec.NAME, new RakDatagramCodec());
         ctx.pipeline().addAfter(RakDatagramCodec.NAME, RakAcknowledgeHandler.NAME, new RakAcknowledgeHandler(sessionCodec));
         ctx.pipeline().addAfter(RakAcknowledgeHandler.NAME, RakSessionCodec.NAME, sessionCodec);
+        if (this.rakChannel.config().getOption(RakChannelOption.RAK_COMPATIBILITY_MODE)) {
+            ctx.pipeline().addAfter(RakSessionCodec.NAME, RakClientNetworkSettingsHandler.NAME, new RakClientNetworkSettingsHandler(this.rakChannel));
+        }
         ctx.pipeline().addAfter(RakSessionCodec.NAME, ConnectedPingHandler.NAME, new ConnectedPingHandler());
         ctx.pipeline().addAfter(ConnectedPingHandler.NAME, ConnectedPongHandler.NAME, new ConnectedPongHandler(sessionCodec));
         ctx.pipeline().addAfter(ConnectedPongHandler.NAME, DisconnectNotificationHandler.NAME, DisconnectNotificationHandler.INSTANCE);
