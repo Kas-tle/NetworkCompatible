@@ -50,8 +50,8 @@ public class RakClientOnlineInitialHandler extends SimpleChannelInboundHandler<E
         this.sendConnectionRequest(ctx);
     }
 
-    private void sendConnectionRequest(ChannelHandlerContext ctx) {
-        long guid = this.rakChannel.config().getOption(RakChannelOption.RAK_GUID);
+    void sendConnectionRequest(ChannelHandlerContext ctx) {
+        long guid = this.rakChannel().config().getOption(RakChannelOption.RAK_GUID);
 
         ByteBuf buffer = ctx.alloc().ioBuffer(18);
         buffer.writeByte(ID_CONNECTION_REQUEST);
@@ -61,12 +61,12 @@ public class RakClientOnlineInitialHandler extends SimpleChannelInboundHandler<E
         ctx.writeAndFlush(new RakMessage(buffer, RakReliability.RELIABLE, RakPriority.IMMEDIATE));
     }
 
-    private void onSuccess(ChannelHandlerContext ctx) {
+    void onSuccess(ChannelHandlerContext ctx) {
         // At this point connection is fully initialized.
         Channel channel = ctx.channel();
         channel.pipeline().remove(RakClientOfflineHandler.NAME);
         channel.pipeline().remove(RakClientOnlineInitialHandler.NAME);
-        this.successPromise.trySuccess();
+        this.successPromise().trySuccess();
     }
 
     @Override
@@ -80,7 +80,7 @@ public class RakClientOnlineInitialHandler extends SimpleChannelInboundHandler<E
                 this.onSuccess(ctx);
                 break;
             case ID_CONNECTION_REQUEST_FAILED:
-                this.successPromise.tryFailure(new IllegalStateException("Connection denied"));
+                this.successPromise().tryFailure(new IllegalStateException("Connection denied"));
                 break;
             default:
                 ctx.fireChannelRead(message.retain());
@@ -88,56 +88,36 @@ public class RakClientOnlineInitialHandler extends SimpleChannelInboundHandler<E
         }
     }
 
-    private void onConnectionRequestAccepted(ChannelHandlerContext ctx, ByteBuf buf) {
+    void onConnectionRequestAccepted(ChannelHandlerContext ctx, ByteBuf buf) {
         buf.skipBytes(1);
-
-        boolean compatibilityMode = this.rakChannel.config().getOption(RakChannelOption.RAK_COMPATIBILITY_MODE);
-        if (compatibilityMode) {
-            RakUtils.skipAddress(buf); // Client address
-        } else {
-            RakUtils.readAddress(buf); // Client address
-        }
-
+        RakUtils.readAddress(buf); // Client address
         buf.readUnsignedShort(); // System index
 
-        // Address + 2 * Long - Minimum amount of data
-        int required = IPV4_MESSAGE_SIZE + 16;
-
-        long pingTime = 0;
-        while (buf.isReadable(required)) {
-            if (compatibilityMode) {
-                RakUtils.skipAddress(buf);
-            } else {
-                RakUtils.readAddress(buf);
-            }
+        while (buf.isReadable(IPV4_MESSAGE_SIZE + 16)) {
+            RakUtils.readAddress(buf);
         }
-        pingTime = buf.readLong();
-        buf.readLong();
 
         ByteBuf incomingBuffer = ctx.alloc().ioBuffer();
-        incomingBuffer.writeByte(ID_NEW_INCOMING_CONNECTION);
-        RakUtils.writeAddress(incomingBuffer, (InetSocketAddress) ctx.channel().remoteAddress());
-        for (int i = 0; i < this.rakChannel.config().getOption(RakChannelOption.RAK_CLIENT_INTERNAL_ADDRESSES); i++) {
-            RakUtils.writeAddress(incomingBuffer, LOCAL_ADDRESS);
+        this.writeIncomingConnection(ctx, incomingBuffer, buf.readLong());
+        buf.readLong();
+        ctx.writeAndFlush(new RakMessage(incomingBuffer, RakReliability.RELIABLE_ORDERED, RakPriority.NORMAL));
+    }
+
+    void writeIncomingConnection(ChannelHandlerContext ctx, ByteBuf buf, long pingTime) {
+        buf.writeByte(ID_NEW_INCOMING_CONNECTION);
+        RakUtils.writeAddress(buf, (InetSocketAddress) ctx.channel().remoteAddress());
+        for (int i = 0; i < this.rakChannel().config().getOption(RakChannelOption.RAK_CLIENT_INTERNAL_ADDRESSES); i++) {
+            RakUtils.writeAddress(buf, LOCAL_ADDRESS);
         }
-        incomingBuffer.writeLong(pingTime);
-        incomingBuffer.writeLong(System.currentTimeMillis());
-        ctx.write(new RakMessage(incomingBuffer, RakReliability.RELIABLE_ORDERED, RakPriority.NORMAL));
+        buf.writeLong(pingTime);
+        buf.writeLong(System.currentTimeMillis());
+    }
 
-        if (compatibilityMode) {
-            ByteBuf pingBuffer = ctx.alloc().ioBuffer();
-            pingBuffer.writeByte(ID_CONNECTED_PING);
-            pingBuffer.writeLong(System.currentTimeMillis());
-            ctx.write(new RakMessage(pingBuffer, RakReliability.UNRELIABLE, RakPriority.NORMAL));
+    RakChannel rakChannel() {
+        return this.rakChannel;
+    }
 
-            ByteBuf netSettingsBuffer = ctx.alloc().ioBuffer();
-            netSettingsBuffer.writeByte(ID_GAME_PACKET);
-            netSettingsBuffer.writeByte(0x06); // length
-            netSettingsBuffer.writeByte(0xc1).writeByte(0x01); // Request network settings packet
-            netSettingsBuffer.writeInt(this.rakChannel.config().getOption(RakChannelOption.RAK_CLIENT_BEDROCK_PROTOCOL_VERSION));
-            ctx.write(new RakMessage(netSettingsBuffer, RakReliability.RELIABLE_ORDERED, RakPriority.NORMAL));
-        }
-
-        ctx.flush();
+    ChannelPromise successPromise() {
+        return this.successPromise;
     }
 }
