@@ -32,12 +32,12 @@ public class RakClientNetworkSettingsHandler extends ChannelOutboundHandlerAdapt
 
         ByteBuf packet = (ByteBuf) msg;
 
-        if (packet.readableBytes() < 4) {
+        if (packet.capacity() < 4) {
             ctx.write(msg, promise);
             return;
         }
 
-        if (packet.getByte(0) != ID_GAME_PACKET) {
+        if (packet.getByte(0) != (byte) ID_GAME_PACKET) {
             ctx.write(msg, promise);
             return;
         }
@@ -48,19 +48,19 @@ public class RakClientNetworkSettingsHandler extends ChannelOutboundHandlerAdapt
             case 11:
             case 10:
             case 9:
-                if (packet.getByte(1) != 0x06) break;
-                if (packet.getByte(2) != 0xc1) break;
-                if ((packet.getByte(3) & 0b10000111) != 0b00000001) break;
+                if (packet.getByte(1) != (byte) 0x06) break;
+                if (packet.getByte(2) != (byte) 0xc1) break;
+                if ((packet.getByte(3) & (byte) 0b10000111) != (byte) 0b00000001) break;
                 onNetworkSettings(ctx, packet);
                 return;
             case 8:
-                if (packet.getByte(1) != 0x07) break;
+                if (packet.getByte(1) != (byte) 0x07) break;
                 if (packet.getByte(2) != 0xc1) break;
                 onNetworkSettings(ctx, packet);
                 return;
             case 7:
-                if (packet.getByte(1) != 0x05) break;
-                if (packet.getByte(2) != 0xc1) break;
+                if (packet.getByte(1) != (byte) 0x05) break;
+                if (packet.getByte(2) != (byte) 0xc1) break;
                 onNetworkSettings(ctx, packet);
                 return;
             default:
