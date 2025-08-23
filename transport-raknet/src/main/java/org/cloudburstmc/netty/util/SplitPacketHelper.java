@@ -34,6 +34,9 @@ public class SplitPacketHelper extends AbstractReferenceCounted {
         if (expectedLength < 2) {
             throw new IllegalArgumentException("expectedLength must be greater than 1");
         }
+        if (expectedLength > 8192) {
+            throw new IllegalArgumentException("Too many split parts, expectedLength must be less than 8192");
+        }
         this.packets = new EncapsulatedPacket[(int) expectedLength];
     }
 
