@@ -16,6 +16,8 @@ import org.cloudburstmc.netty.handler.codec.raknet.common.RakDatagramCodec;
 import org.cloudburstmc.netty.handler.codec.raknet.common.RakSessionCodec;
 import org.cloudburstmc.netty.util.RakUtils;
 
+import static org.cloudburstmc.netty.channel.raknet.RakConstants.MAXIMUM_MTU_SIZE;
+
 public class RakClientOfflineHandlerCompatible extends RakClientOfflineHandler {
     public static final String NAME = "rak-client-handler";
 

@@ -13,6 +13,7 @@ You can join the [Discord](https://discord.gg/5z4GuSnqmQ) for help with this for
 - Allows for resetting security state if `Open Connection Reply 1` is resent by the server
 - Only do retries with `Open Connection Request 1`, and reserve `Open Connection Request 2` only as a direct response to `Open Connection Reply 1`
 - Allows using datagram channel factories for raknet (from [@AlexProgrammerDE](https://github.com/AlexProgrammerDE))
+- Skips over improperly typed client address fields
 
 ## Usage
 
