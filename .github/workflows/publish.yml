@@ -6,6 +6,7 @@ on:
       - 'master'
     paths:
       - 'gradle.properties'
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -25,6 +26,7 @@ jobs:
         id: version
         run: echo "version=$(cat gradle.properties | grep version= | cut -d'=' -f2)" >> $GITHUB_OUTPUT
       - name: Make Release Publication
+        if: ${{ success() && github.repository == 'Kas-tle/NetworkCompatible' && github.ref_name == 'master' }}
         id: release
         uses: Kas-tle/base-release-action@65d06f835be34757c6d73c16959c97e92c2a3c7f
         with:
@@ -49,6 +51,7 @@ jobs:
 
     steps:
     - uses: Kas-tle/release-build-log-action@1b57448eaf9476e6e05450e4ea240449eac2c0d2
+      if: ${{ success() && github.repository == 'Kas-tle/NetworkCompatible' && github.ref_name == 'master' }}
       with:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         releaseID: ${{ needs.publish.outputs.release_id }}
