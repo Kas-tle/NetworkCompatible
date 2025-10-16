@@ -50,6 +50,7 @@ subprojects {
 
                 pom {
                     description.set(project.name)
+                    name.set(project.name)
                     url.set("https://github.com/Kas-tle/NetworkCompatible")
                     inceptionYear.set("2024")
                     licenses {
