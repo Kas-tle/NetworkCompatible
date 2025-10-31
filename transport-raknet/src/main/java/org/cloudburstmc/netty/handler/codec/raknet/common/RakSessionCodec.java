@@ -568,7 +568,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
         }
 
         if (hasResent) {
-            this.slidingWindow.onResend(curTime);
+            this.slidingWindow.onResend(this.datagramWriteIndex);
         }
 
         return resendCount;
