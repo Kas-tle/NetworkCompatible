@@ -56,11 +56,7 @@ public class RakClientOfflineHandlerCompatible extends RakClientOfflineHandler {
         RakUtils.skipAddress(buffer); // serverAddress
 
         int mtu = buffer.readShort();
-        boolean security = buffer.readBoolean(); // security
-        if (security) {
-            this.successPromise().tryFailure(new SecurityException());
-            return;
-        }
+        buffer.skipBytes(1); // security (ignored by vanilla client)
 
         this.rakChannel().config().setOption(RakChannelOption.RAK_MTU, mtu);
         this.state(RakOfflineState.HANDSHAKE_COMPLETED);
