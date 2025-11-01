@@ -14,9 +14,8 @@ import org.cloudburstmc.netty.handler.codec.raknet.common.EncapsulatedToMessageH
 import org.cloudburstmc.netty.handler.codec.raknet.common.RakAcknowledgeHandler;
 import org.cloudburstmc.netty.handler.codec.raknet.common.RakDatagramCodec;
 import org.cloudburstmc.netty.handler.codec.raknet.common.RakSessionCodec;
+import org.cloudburstmc.netty.handler.codec.raknet.common.RakSessionCodecCompatible;
 import org.cloudburstmc.netty.util.RakUtils;
-
-import static org.cloudburstmc.netty.channel.raknet.RakConstants.MAXIMUM_MTU_SIZE;
 
 public class RakClientOfflineHandlerCompatible extends RakClientOfflineHandler {
     public static final String NAME = "rak-client-handler";
@@ -36,7 +35,7 @@ public class RakClientOfflineHandlerCompatible extends RakClientOfflineHandler {
 
     @Override
     void onSuccess(ChannelHandlerContext ctx) {
-        RakSessionCodec sessionCodec = new RakSessionCodec(this.rakChannel());
+        RakSessionCodec sessionCodec = new RakSessionCodecCompatible(this.rakChannel());
         ctx.pipeline().addAfter(NAME, RakDatagramCodec.NAME, new RakDatagramCodec());
         ctx.pipeline().addAfter(RakDatagramCodec.NAME, RakAcknowledgeHandler.NAME, new RakAcknowledgeHandler(sessionCodec));
         ctx.pipeline().addAfter(RakAcknowledgeHandler.NAME, RakSessionCodec.NAME, sessionCodec);
