@@ -870,13 +870,13 @@ public class RakSessionCodec extends ChannelDuplexHandler {
         return channel;
     }
 
-    protected RakDatagramPacket createDatagramPacket() {
+    RakDatagramPacket createDatagramPacket() {
         RakDatagramPacket datagram = RakDatagramPacket.newInstance();
         datagram.setFlag(FLAG_NEEDS_B_AND_AS);
         return datagram;
     }
 
-    protected EncapsulatedPacket createEncapsulatedPacket() {
+    EncapsulatedPacket createEncapsulatedPacket() {
         EncapsulatedPacket packet = EncapsulatedPacket.newInstance();
         packet.setNeedsBAS(true);
         return packet;

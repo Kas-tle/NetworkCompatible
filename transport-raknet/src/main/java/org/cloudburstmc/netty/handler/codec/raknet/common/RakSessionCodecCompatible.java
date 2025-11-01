@@ -12,12 +12,12 @@ public class RakSessionCodecCompatible extends RakSessionCodec {
     }
 
     @Override
-    protected RakDatagramPacket createDatagramPacket() {
+    RakDatagramPacket createDatagramPacket() {
         return RakDatagramPacket.newInstance();
     }
 
     @Override
-    protected EncapsulatedPacket createEncapsulatedPacket() {
+    EncapsulatedPacket createEncapsulatedPacket() {
         return EncapsulatedPacket.newInstance();
     }
 }
