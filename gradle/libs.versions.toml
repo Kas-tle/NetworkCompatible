@@ -1,6 +1,6 @@
 [versions]
 netty = "4.1.101.Final"
-junit = "5.9.2"
+junit = "5.14.1"
 
 
 [libraries]
