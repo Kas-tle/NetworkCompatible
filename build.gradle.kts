@@ -112,6 +112,7 @@ subprojects {
 nmcp {
     publishAggregation {
         project(":transport-raknet")
+        // TODO: Add publishing for transport-nethetnet
 
         username.set(System.getenv("MAVEN_CENTRAL_USERNAME") ?: "username")
         password.set(System.getenv("MAVEN_CENTRAL_PASSWORD") ?: "password")
