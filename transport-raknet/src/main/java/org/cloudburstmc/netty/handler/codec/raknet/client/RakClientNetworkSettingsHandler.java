@@ -4,42 +4,50 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
-import io.netty.util.AttributeKey;
-import io.netty.util.internal.logging.InternalLogger;
-import io.netty.util.internal.logging.InternalLoggerFactory;
+import io.netty.util.concurrent.Promise;
 import org.cloudburstmc.netty.channel.raknet.RakChannel;
+import org.cloudburstmc.netty.channel.raknet.RakPriority;
+import org.cloudburstmc.netty.channel.raknet.RakReliability;
 import org.cloudburstmc.netty.channel.raknet.config.RakChannelOption;
+import org.cloudburstmc.netty.channel.raknet.packet.RakMessage;
 
 import static org.cloudburstmc.netty.channel.raknet.RakConstants.ID_GAME_PACKET;
 
 public class RakClientNetworkSettingsHandler extends ChannelOutboundHandlerAdapter {
     public static final String NAME = "rak-client-network-settings-handler";
-    public static final AttributeKey<ByteBuf> NETWORK_SETTINGS_PAYLOAD = AttributeKey.valueOf("network-settings-payload");
-    private static final InternalLogger log = InternalLoggerFactory.getInstance(RakClientNetworkSettingsHandler.class);
 
     private final RakChannel channel;
+    private final Promise<RakMessage> networkSettingsPacketPromise;
 
-    public RakClientNetworkSettingsHandler(RakChannel channel) {
+    public RakClientNetworkSettingsHandler(RakChannel channel, Promise<RakMessage> networkSettingsPacketPromise) {
         this.channel = channel;
+        this.networkSettingsPacketPromise = networkSettingsPacketPromise;
     }
 
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-        if (!(msg instanceof ByteBuf)) {
-            ctx.write(msg, promise);
-            return;
+        ctx.channel().pipeline().remove(RakClientNetworkSettingsHandler.NAME);
+
+        RakMessage packet;
+
+        if (!(msg instanceof RakMessage)) {
+            if (msg instanceof ByteBuf) {
+                packet = new RakMessage((ByteBuf) msg, RakReliability.RELIABLE_ORDERED, RakPriority.NORMAL);
+            } else {
+                throw new IllegalStateException("First packet was not an instance of RakMessage or ByteBuf: class " + msg.getClass().getName());
+            }
+        } else {
+            packet = (RakMessage) msg;
         }
 
-        ByteBuf packet = (ByteBuf) msg;
+        ByteBuf content = packet.content();
 
-        if (packet.capacity() < 4) {
-            ctx.write(msg, promise);
-            return;
+        if (content.capacity() < 4) {
+            throw new IllegalStateException("First packet was not a RequestNetworkSettings packet: Content less than 4 bytes");
         }
 
-        if (packet.getByte(0) != (byte) ID_GAME_PACKET) {
-            ctx.write(msg, promise);
-            return;
+        if (content.getByte(0) != (byte) ID_GAME_PACKET) {
+            throw new IllegalStateException("First packet was not a RequestNetworkSettings packet: Expected RakNet game packet ID (" + ID_GAME_PACKET + "), but got " + content.getByte(0));
         }
 
         int rakVersion = this.channel.config().getOption(RakChannelOption.RAK_PROTOCOL_VERSION);
@@ -48,31 +56,25 @@ public class RakClientNetworkSettingsHandler extends ChannelOutboundHandlerAdapt
             case 11:
             case 10:
             case 9:
-                if (packet.getByte(1) != (byte) 0x06) break;
-                if (packet.getByte(2) != (byte) 0xc1) break;
-                if ((packet.getByte(3) & (byte) 0b10000111) != (byte) 0b00000001) break;
-                onNetworkSettings(ctx, packet);
+                if (content.getByte(1) != (byte) 0x06) break;
+                if (content.getByte(2) != (byte) 0xc1) break;
+                if ((content.getByte(3) & (byte) 0b10000111) != (byte) 0b00000001) break;
+                this.networkSettingsPacketPromise.setSuccess(packet);
                 return;
             case 8:
-                if (packet.getByte(1) != (byte) 0x07) break;
-                if (packet.getByte(2) != 0xc1) break;
-                onNetworkSettings(ctx, packet);
+                if (content.getByte(1) != (byte) 0x07) break;
+                if (content.getByte(2) != (byte) 0xc1) break;
+                this.networkSettingsPacketPromise.setSuccess(packet);
                 return;
             case 7:
-                if (packet.getByte(1) != (byte) 0x05) break;
-                if (packet.getByte(2) != (byte) 0xc1) break;
-                onNetworkSettings(ctx, packet);
+                if (content.getByte(1) != (byte) 0x05) break;
+                if (content.getByte(2) != (byte) 0xc1) break;
+                this.networkSettingsPacketPromise.setSuccess(packet);
                 return;
             default:
                 throw new UnsupportedOperationException("Unsupported protocol version: " + rakVersion);
         }
 
-        ctx.write(msg, promise);
-    }
-
-    private void onNetworkSettings(ChannelHandlerContext ctx, ByteBuf packet) {
-        log.info("Detected network settings packet, removing handler");
-        ctx.channel().attr(NETWORK_SETTINGS_PAYLOAD).set(packet.retain());
-        ctx.channel().pipeline().remove(RakClientNetworkSettingsHandler.NAME);
+        throw new IllegalStateException("First packet was not a RequestNetworkSettings packet: Invalid Bedrock packet ID");
     }
 }

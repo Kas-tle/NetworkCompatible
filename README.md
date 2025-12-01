@@ -9,7 +9,6 @@ You can join the [Discord](https://discord.gg/5z4GuSnqmQ) for help with this for
 - New incoming connection batches additional packets to more closely imitate the vanilla client:
   - A `Connected Ping`
   - The first game packet, `Request Network Settings Packet`
-    - Attempts to detect it from the connection, but uses `RakChannelOption.RAK_CLIENT_BEDROCK_PROTOCOL_VERSION` if it is not detected in the pipeline
 - Allows for resetting security state if `Open Connection Reply 1` is resent by the server
 - Only do retries with `Open Connection Request 1`, and reserve `Open Connection Request 2` only as a direct response to `Open Connection Reply 1`
 - Allows using datagram channel factories for raknet (from [@AlexProgrammerDE](https://github.com/AlexProgrammerDE))
