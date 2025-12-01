@@ -6,6 +6,8 @@ import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import io.netty.util.concurrent.Promise;
 import org.cloudburstmc.netty.channel.raknet.RakChannel;
+import org.cloudburstmc.netty.channel.raknet.RakPriority;
+import org.cloudburstmc.netty.channel.raknet.RakReliability;
 import org.cloudburstmc.netty.channel.raknet.config.RakChannelOption;
 import org.cloudburstmc.netty.channel.raknet.packet.RakMessage;
 
@@ -26,19 +28,26 @@ public class RakClientNetworkSettingsHandler extends ChannelOutboundHandlerAdapt
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
         ctx.channel().pipeline().remove(RakClientNetworkSettingsHandler.NAME);
 
+        RakMessage packet;
+
         if (!(msg instanceof RakMessage)) {
-            throw new IllegalStateException("First packet was not a RequestNetworkSettings packet: Not a RakMessage");
+            if (msg instanceof ByteBuf) {
+                packet = new RakMessage((ByteBuf) msg, RakReliability.RELIABLE_ORDERED, RakPriority.NORMAL);
+            } else {
+                throw new IllegalStateException("First packet was not an instance of RakMessage or ByteBuf: class " + msg.getClass().getName());
+            }
+        } else {
+            packet = (RakMessage) msg;
         }
 
-        RakMessage packet = (RakMessage) msg;
         ByteBuf content = packet.content();
 
         if (content.capacity() < 4) {
-            throw new IllegalStateException("First packet was not a RequestNetworkSettings packet: Content too small");
+            throw new IllegalStateException("First packet was not a RequestNetworkSettings packet: Content less than 4 bytes");
         }
 
         if (content.getByte(0) != (byte) ID_GAME_PACKET) {
-            throw new IllegalStateException("First packet was not a RequestNetworkSettings packet: Invalid RakNet packet ID");
+            throw new IllegalStateException("First packet was not a RequestNetworkSettings packet: Expected RakNet game packet ID (" + ID_GAME_PACKET + "), but got " + content.getByte(0));
         }
 
         int rakVersion = this.channel.config().getOption(RakChannelOption.RAK_PROTOCOL_VERSION);
