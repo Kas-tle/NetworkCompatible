@@ -16,20 +16,20 @@ import static org.cloudburstmc.netty.channel.raknet.RakConstants.IPV4_MESSAGE_SI
 public class RakClientOnlineInitialHandlerCompatible extends RakClientOnlineInitialHandler {
     public static final String NAME = "rak-client-online-initial-handler";
 
-    private final Promise<RakMessage> networkSettingsPacketPromise;
+    private final Promise<Object> packetPromise;
     private long pingTime = 0;
 
-    public RakClientOnlineInitialHandlerCompatible(RakChannel rakChannel, ChannelPromise successPromise, Promise<RakMessage> networkSettingsPacketPromise) {
+    public RakClientOnlineInitialHandlerCompatible(RakChannel rakChannel, ChannelPromise successPromise, Promise<Object> packetPromise) {
         super(rakChannel, successPromise);
-        this.networkSettingsPacketPromise = networkSettingsPacketPromise;
+        this.packetPromise = packetPromise;
     }
 
     @Override
     void onSuccess(ChannelHandlerContext ctx) {
         super.onSuccess(ctx);
 
-        // Wait for the RequestNetworkSettings packet before sending the final batch
-        this.networkSettingsPacketPromise.addListener(future -> {
+        // Wait for the first game packet (request network settings) before sending the final batch
+        this.packetPromise.addListener(future -> {
             ByteBuf incomingBuffer = ctx.alloc().ioBuffer();
             this.writeIncomingConnection(ctx, incomingBuffer, pingTime);
             ctx.write(new RakMessage(incomingBuffer, RakReliability.RELIABLE_ORDERED, RakPriority.NORMAL));
