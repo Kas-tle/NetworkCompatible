@@ -8,7 +8,9 @@ import dev.onvoid.webrtc.PortAllocatorConfig;
 import dev.onvoid.webrtc.RTCBundlePolicy;
 import dev.onvoid.webrtc.RTCConfiguration;
 import dev.onvoid.webrtc.RTCDataChannel;
+import dev.onvoid.webrtc.RTCDataChannelBuffer;
 import dev.onvoid.webrtc.RTCDataChannelInit;
+import dev.onvoid.webrtc.RTCDataChannelObserver;
 import dev.onvoid.webrtc.RTCDataChannelState;
 import dev.onvoid.webrtc.RTCIceCandidate;
 import dev.onvoid.webrtc.RTCOfferOptions;
@@ -25,6 +27,7 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.nio.channels.ClosedChannelException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
@@ -40,9 +43,11 @@ public class NetherNetClientChannel extends NetherNetChannel {
     
     private volatile boolean handshakeComplete = false;
 
-    private static final int HANDSHAKE_TIMEOUT_MS = 500; 
-    private volatile ScheduledFuture<?> handshakeTimeoutTask;
+    private ChannelPromise connectPromise;
 
+    private static final int HANDSHAKE_TIMEOUT_MS = 500;
+    private volatile ScheduledFuture<?> handshakeTimeoutTask;
+    
     public NetherNetClientChannel() {
         super(null, null, null);
         this.networkId = ThreadLocalRandom.current().nextLong();
@@ -71,6 +76,10 @@ public class NetherNetClientChannel extends NetherNetChannel {
         if (discovery != null) discovery.close();
         if (factory != null) factory.dispose();
         if (audioDeviceModule != null) audioDeviceModule.dispose();
+
+        if (connectPromise != null && !connectPromise.isDone()) {
+            connectPromise.tryFailure(new ClosedChannelException());
+        }
     }
 
     @Override
@@ -122,7 +131,7 @@ public class NetherNetClientChannel extends NetherNetChannel {
             InetSocketAddress remoteAddress = (InetSocketAddress) remote;
             NetherNetClientChannel.this.remoteAddress = remoteAddress;
 
-            promise.setSuccess();
+            NetherNetClientChannel.this.connectPromise = promise;
 
             eventLoop().execute(() -> startHandshake(remoteAddress));
         }
@@ -145,8 +154,6 @@ public class NetherNetClientChannel extends NetherNetChannel {
                 } else {
                     discovery.bind(0);
                 }
-            } else {
-                log.debug("Discovery socket already active. Reusing existing transport.");
             }
 
             log.debug("Creating RTCPeerConnection...");
@@ -187,8 +194,35 @@ public class NetherNetClientChannel extends NetherNetChannel {
             
             RTCDataChannel reliable = peerConnection.createDataChannel(NetherNetConstants.RELIABLE_CHANNEL_LABEL, reliableInit);
             RTCDataChannel unreliable = peerConnection.createDataChannel(NetherNetConstants.UNRELIABLE_CHANNEL_LABEL, unreliableInit);
-            
-            setDataChannels(reliable, unreliable);
+
+            reliable.registerObserver(new RTCDataChannelObserver() {
+                @Override
+                public void onStateChange() {
+                    if (reliable.getState() == RTCDataChannelState.OPEN) {
+                        // Switch back to Netty Thread to complete the connection safely
+                        eventLoop().execute(() -> {
+                            if (!handshakeComplete) {
+                                log.debug("NetherNet Connection Fully Established (via Observer).");
+                                handshakeComplete = true;
+
+                                setDataChannels(reliable, unreliable);
+
+                                if (connectPromise != null && !connectPromise.isDone()) {
+                                    connectPromise.trySuccess();
+                                }
+                                pipeline().fireChannelActive();
+                            }
+                        });
+                    }
+                }
+
+                @Override public void onBufferedAmountChange(long previousAmount) {}
+                @Override public void onMessage(RTCDataChannelBuffer buffer) {
+                    // This shouldn't happen during handshake, but if it does, release the buffer to avoid leaks.
+                    // Real data handling happens after setDataChannels swaps the observer.
+                    ReferenceCountUtil.release(buffer); 
+                }
+            });
 
             discovery.registerSignalHandler(connectionId, (signal) -> {
                 String[] parts = signal.split(" ", 3);
@@ -270,14 +304,6 @@ public class NetherNetClientChannel extends NetherNetChannel {
             } finally {
                 ReferenceCountUtil.release(payload);
             }
-        });
-        
-        eventLoop().scheduleAtFixedRate(() -> {
-            if (!handshakeComplete && reliableChannel != null && reliableChannel.getState() == RTCDataChannelState.OPEN) {
-                log.debug("NetherNet Connection Fully Established.");
-                handshakeComplete = true;
-                pipeline().fireChannelActive();
-            }
-        }, 100, 100, TimeUnit.MILLISECONDS);
+        });        
     }
 }
