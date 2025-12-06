@@ -265,7 +265,15 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
     
     private void writeString(ByteBuf buf, String s) {
         byte[] b = s.getBytes(StandardCharsets.UTF_8);
-        buf.writeByte(b.length);
+        this.writeUnsignedVarInt(buf, b.length); 
         buf.writeBytes(b);
+    }
+
+    private void writeUnsignedVarInt(ByteBuf buf, int value) {
+        while ((value & 0xFFFFFF80) != 0) {
+            buf.writeByte((byte) ((value & 0x7F) | 0x80));
+            value >>>= 7;
+        }
+        buf.writeByte((byte) value);
     }
 }

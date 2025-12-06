@@ -50,8 +50,8 @@ public class NetherNetConstants {
     }
 
     public static byte[] encryptDiscoveryPacket(ByteBuf packet) throws Exception {
-        int len = packet.readableBytes();
-        ByteBuf payload = Unpooled.buffer(2 + len);
+        int len = packet.readableBytes() + 2;
+        ByteBuf payload = Unpooled.buffer(len);
         payload.writeShortLE(len);
         payload.writeBytes(packet);
         
