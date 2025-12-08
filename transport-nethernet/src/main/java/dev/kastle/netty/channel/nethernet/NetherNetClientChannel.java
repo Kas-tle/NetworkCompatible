@@ -18,7 +18,6 @@ import dev.onvoid.webrtc.RTCPeerConnectionState;
 import dev.onvoid.webrtc.RTCSdpType;
 import dev.onvoid.webrtc.RTCSessionDescription;
 import dev.onvoid.webrtc.SetSessionDescriptionObserver;
-import dev.onvoid.webrtc.media.audio.HeadlessAudioDeviceModule;
 import io.netty.channel.ChannelPromise;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.ScheduledFuture;
@@ -34,8 +33,7 @@ import java.util.concurrent.TimeUnit;
 public class NetherNetClientChannel extends NetherNetChannel {
     private static final InternalLogger log = InternalLoggerFactory.getInstance(NetherNetClientChannel.class);
 
-    private HeadlessAudioDeviceModule audioDeviceModule;
-    private PeerConnectionFactory factory;
+    private final PeerConnectionFactory factory;
     
     private final NetherNetDiscovery discovery;
     private final long networkId;
@@ -49,15 +47,17 @@ public class NetherNetClientChannel extends NetherNetChannel {
     private volatile ScheduledFuture<?> handshakeTimeoutTask;
     
     public NetherNetClientChannel() {
-        super(null, null, null);
-        this.networkId = ThreadLocalRandom.current().nextLong();
-        this.connectionId = ThreadLocalRandom.current().nextLong();
-        this.discovery = new NetherNetDiscovery(this.networkId);
+        this(new PeerConnectionFactory());
     }
 
-    public NetherNetClientChannel(long networkId) {
+    public NetherNetClientChannel(PeerConnectionFactory factory) {
+        this(ThreadLocalRandom.current().nextLong(), factory);
+    }
+
+    public NetherNetClientChannel(long networkId, PeerConnectionFactory factory) {
         super(null, null, null);
         this.networkId = networkId;
+        this.factory = factory;
         this.connectionId = ThreadLocalRandom.current().nextLong();
         this.discovery = new NetherNetDiscovery(this.networkId);
     }
@@ -74,8 +74,6 @@ public class NetherNetClientChannel extends NetherNetChannel {
             handshakeTimeoutTask.cancel(false);
         }
         if (discovery != null) discovery.close();
-        if (factory != null) factory.dispose();
-        if (audioDeviceModule != null) audioDeviceModule.dispose();
 
         if (connectPromise != null && !connectPromise.isDone()) {
             connectPromise.tryFailure(new ClosedChannelException());
@@ -140,12 +138,6 @@ public class NetherNetClientChannel extends NetherNetChannel {
     private void startHandshake(InetSocketAddress remoteAddress) {
         try {
             log.debug("Initializing WebRTC native components...");
-            if (this.audioDeviceModule == null) {
-                this.audioDeviceModule = new HeadlessAudioDeviceModule();
-            }
-            if (this.factory == null) {
-                this.factory = new PeerConnectionFactory(this.audioDeviceModule);
-            }
 
             if (!discovery.isActive()) {
                 log.debug("Binding discovery socket...");

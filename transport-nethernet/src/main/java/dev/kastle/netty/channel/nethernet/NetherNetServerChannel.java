@@ -15,7 +15,6 @@ import dev.onvoid.webrtc.RTCPeerConnectionState;
 import dev.onvoid.webrtc.RTCSdpType;
 import dev.onvoid.webrtc.RTCSessionDescription;
 import dev.onvoid.webrtc.SetSessionDescriptionObserver;
-import dev.onvoid.webrtc.media.audio.HeadlessAudioDeviceModule;
 import io.netty.channel.AbstractServerChannel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelMetadata;
@@ -32,7 +31,6 @@ public class NetherNetServerChannel extends AbstractServerChannel {
     private static final ChannelMetadata METADATA = new ChannelMetadata(false, 16);
 
     private final NetherNetChannelConfig config = new NetherNetChannelConfig(this);
-    private final HeadlessAudioDeviceModule audioDeviceModule;
     private final PeerConnectionFactory factory;
     
     private NetherNetDiscovery discovery;
@@ -40,9 +38,16 @@ public class NetherNetServerChannel extends AbstractServerChannel {
     private long networkId;
 
     public NetherNetServerChannel() {
-        this.audioDeviceModule = new HeadlessAudioDeviceModule();
-        this.factory = new PeerConnectionFactory(this.audioDeviceModule);
-        this.networkId = ThreadLocalRandom.current().nextLong();
+        this(new PeerConnectionFactory());
+    }
+
+    public NetherNetServerChannel(PeerConnectionFactory factory) {
+        this(ThreadLocalRandom.current().nextLong(), factory);
+    }
+
+    public NetherNetServerChannel(long networkId, PeerConnectionFactory factory) {
+        this.factory = factory;
+        this.networkId = networkId;
     }
 
     @Override
@@ -147,7 +152,6 @@ public class NetherNetServerChannel extends AbstractServerChannel {
     protected void doClose() throws Exception {
         if (discovery != null) discovery.close();
         factory.dispose();
-        audioDeviceModule.dispose();
     }
 
     @Override
