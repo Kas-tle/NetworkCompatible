@@ -36,6 +36,7 @@ import org.cloudburstmc.netty.util.*;
 import java.net.Inet6Address;
 import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Iterator;
 import java.util.Queue;
 import java.util.concurrent.TimeUnit;
@@ -76,7 +77,7 @@ public class RakSessionCodec extends ChannelDuplexHandler {
     private IntObjectMap<RakDatagramPacket> sentDatagrams;
     private Queue<IntRange> incomingAcks;
     private Queue<IntRange> incomingNaks;
-    private Queue<IntRange> outgoingAcks;
+    private Deque<IntRange> outgoingAcks;
     private Queue<IntRange> outgoingNaks;
     private long lastMinWeight;
 
@@ -287,7 +288,15 @@ public class RakSessionCodec extends ChannelDuplexHandler {
             this.outgoingNaks.offer(new IntRange(packet.getSequenceIndex() - missedDatagrams, packet.getSequenceIndex() - 1));
         }
 
-        this.outgoingAcks.offer(new IntRange(packet.getSequenceIndex(), packet.getSequenceIndex()));
+        int sequenceIndex = packet.getSequenceIndex();
+        IntRange lastRange = this.outgoingAcks.peekLast();
+        
+        // Check if the new sequence index is exactly 1 greater than the last range's end
+        if (lastRange != null && lastRange.end == sequenceIndex - 1) {
+            lastRange.end = sequenceIndex;
+        } else {
+            this.outgoingAcks.offer(new IntRange(sequenceIndex, sequenceIndex));
+        }
 
         for (final EncapsulatedPacket encapsulated : packet.getPackets()) {
             if (encapsulated.getReliability().isReliable()) {
