@@ -1,6 +1,6 @@
 package dev.kastle.netty.channel.nethernet;
 
-import dev.onvoid.webrtc.PeerConnectionFactory;
+import dev.kastle.webrtc.PeerConnectionFactory;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 

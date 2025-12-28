@@ -1,6 +1,6 @@
 package dev.kastle.netty.channel.nethernet;
 
-import dev.onvoid.webrtc.RTCPeerConnection;
+import dev.kastle.webrtc.RTCPeerConnection;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelPromise;
 

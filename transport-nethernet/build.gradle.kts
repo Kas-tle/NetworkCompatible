@@ -2,6 +2,7 @@ description = "NetherNet transport for Netty"
 
 val nativePlatforms = listOf(
     "windows-x86_64",
+    "windows-aarch64",
     "linux-x86_64",
     "linux-aarch64",
     "macos-x86_64",
@@ -22,6 +23,14 @@ dependencies {
 
     testImplementation(libs.bundles.junit)
     testRuntimeOnly(libs.junit.platform.launcher) 
+}
+
+configure<JavaPluginExtension> {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    }
+    withJavadocJar()
+    withSourcesJar()
 }
 
 tasks.jar {
