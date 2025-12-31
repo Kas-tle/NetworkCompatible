@@ -1,7 +1,7 @@
 package dev.kastle.netty.util.nethernet;
 
 import dev.kastle.netty.channel.nethernet.NetherNetConstants;
-import dev.kastle.netty.handler.codec.nethernet.NetherNetDiscovery;
+import dev.kastle.netty.channel.nethernet.signaling.NetherNetDiscovery;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -16,7 +16,7 @@ import java.util.concurrent.ThreadLocalRandom;
 public class NetherNetScanner {
     public static void main(String[] args) throws Exception {
         long myNetworkId = ThreadLocalRandom.current().nextLong();
-        dev.kastle.netty.handler.codec.nethernet.NetherNetDiscovery discovery = new NetherNetDiscovery(myNetworkId);
+        dev.kastle.netty.channel.nethernet.signaling.NetherNetDiscovery discovery = new NetherNetDiscovery(myNetworkId);
 
         discovery.bind(new InetSocketAddress("::", 0));
 

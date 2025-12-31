@@ -1,7 +1,7 @@
 package dev.kastle.netty.channel.nethernet;
 
 import dev.kastle.netty.channel.nethernet.config.NetherNetChannelConfig;
-import dev.kastle.netty.handler.codec.nethernet.NetherNetDiscovery;
+import dev.kastle.netty.channel.nethernet.signaling.NetherNetDiscovery;
 import dev.kastle.webrtc.CreateSessionDescriptionObserver;
 import dev.kastle.webrtc.PeerConnectionFactory;
 import dev.kastle.webrtc.PeerConnectionObserver;

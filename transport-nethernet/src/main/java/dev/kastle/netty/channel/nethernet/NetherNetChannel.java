@@ -29,8 +29,8 @@ public abstract class NetherNetChannel extends AbstractChannel {
 
     protected final NetherNetChannelConfig config;
     protected volatile RTCPeerConnection peerConnection;
-    protected volatile InetSocketAddress remoteAddress;
-    protected volatile InetSocketAddress localAddress;
+    protected volatile SocketAddress remoteAddress;
+    protected volatile SocketAddress localAddress;
 
     protected RTCDataChannel reliableChannel;
     protected RTCDataChannel unreliableChannel;

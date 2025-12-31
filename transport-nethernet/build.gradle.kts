@@ -11,8 +11,11 @@ val nativePlatforms = listOf(
 
 dependencies {
     api(libs.bundles.netty)
+    api(libs.netty.codec.http)
     api(libs.expiringmap)
     api(libs.webrtc.java)
+
+    implementation(libs.gson)
     nativePlatforms.forEach { platform ->
         implementation(libs.webrtc.java) {
             artifact {
@@ -38,6 +41,6 @@ tasks.jar {
 }
 
 tasks.register<JavaExec>("runDiscovery") {
-    mainClass.set("dev.kastle.netty.channel.nethernet.NetherNetScanner") 
+    mainClass.set("dev.kastle.netty.util.nethernet.NetherNetScanner") 
     classpath = sourceSets["main"].runtimeClasspath 
 }

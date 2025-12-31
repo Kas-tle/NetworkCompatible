@@ -1,4 +1,4 @@
-package dev.kastle.netty.handler.codec.nethernet;
+package dev.kastle.netty.channel.nethernet.signaling;
 
 import dev.kastle.netty.channel.nethernet.NetherNetConstants;
 import io.netty.bootstrap.Bootstrap;

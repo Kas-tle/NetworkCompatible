@@ -1,10 +1,10 @@
 package dev.kastle.netty.channel.nethernet;
 
-import dev.kastle.netty.handler.codec.nethernet.NetherNetDiscovery;
+import dev.kastle.netty.channel.nethernet.config.NetherNetAddress;
+import dev.kastle.netty.channel.nethernet.signaling.NetherNetSignaling;
 import dev.kastle.webrtc.CreateSessionDescriptionObserver;
 import dev.kastle.webrtc.PeerConnectionFactory;
 import dev.kastle.webrtc.PeerConnectionObserver;
-import dev.kastle.webrtc.PortAllocatorConfig;
 import dev.kastle.webrtc.RTCBundlePolicy;
 import dev.kastle.webrtc.RTCConfiguration;
 import dev.kastle.webrtc.RTCDataChannel;
@@ -13,6 +13,7 @@ import dev.kastle.webrtc.RTCDataChannelInit;
 import dev.kastle.webrtc.RTCDataChannelObserver;
 import dev.kastle.webrtc.RTCDataChannelState;
 import dev.kastle.webrtc.RTCIceCandidate;
+import dev.kastle.webrtc.RTCIceServer;
 import dev.kastle.webrtc.RTCOfferOptions;
 import dev.kastle.webrtc.RTCPeerConnectionState;
 import dev.kastle.webrtc.RTCSdpType;
@@ -27,39 +28,41 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 public class NetherNetClientChannel extends NetherNetChannel {
     private static final InternalLogger log = InternalLoggerFactory.getInstance(NetherNetClientChannel.class);
 
-    private final PeerConnectionFactory factory;
-    
-    private final NetherNetDiscovery discovery;
-    private final long networkId;
-    private volatile long connectionId;
+    private final PeerConnectionFactory factory;    
+    private final NetherNetSignaling signaling;
+
+    private volatile long connectionId; // Session ID (Long)
+    private volatile String targetNetworkId; // Peer ID (String, for Realms)
     
     private volatile boolean handshakeComplete = false;
 
     private ChannelPromise connectPromise;
 
-    private static final int HANDSHAKE_TIMEOUT_MS = 500;
+    private static final int HANDSHAKE_TIMEOUT_MS = 3000;
     private volatile ScheduledFuture<?> handshakeTimeoutTask;
+
+    private volatile String localUfrag;
     
-    public NetherNetClientChannel() {
-        this(new PeerConnectionFactory());
+    public NetherNetClientChannel(NetherNetSignaling signaling) {
+        this(new PeerConnectionFactory(), signaling);
     }
 
-    public NetherNetClientChannel(PeerConnectionFactory factory) {
-        this(ThreadLocalRandom.current().nextLong(), factory);
-    }
-
-    public NetherNetClientChannel(long networkId, PeerConnectionFactory factory) {
+    public NetherNetClientChannel(PeerConnectionFactory factory, NetherNetSignaling signaling) {
         super(null, null, null);
-        this.networkId = networkId;
         this.factory = factory;
+        this.signaling = signaling;
         this.connectionId = ThreadLocalRandom.current().nextLong();
-        this.discovery = new NetherNetDiscovery(this.networkId);
+    }
+
+    public void setTargetNetworkId(String id) {
+        this.targetNetworkId = id;
     }
 
     @Override
@@ -73,8 +76,7 @@ public class NetherNetClientChannel extends NetherNetChannel {
         if (handshakeTimeoutTask != null) {
             handshakeTimeoutTask.cancel(false);
         }
-        if (discovery != null) discovery.close();
-
+        if (signaling != null) signaling.close();
         if (connectPromise != null && !connectPromise.isDone()) {
             connectPromise.tryFailure(new ClosedChannelException());
         }
@@ -85,217 +87,229 @@ public class NetherNetClientChannel extends NetherNetChannel {
         return new NetherNetClientUnsafe();
     }
 
-    private void resetAndRetryHandshake() {
-        if (!isOpen()) return;
-
-        log.debug("Handshake timed out/failed. Resetting ID and retrying...");
-
-        if (handshakeTimeoutTask != null) {
-            handshakeTimeoutTask.cancel(false);
-            handshakeTimeoutTask = null;
-        }
-
-        if (peerConnection != null) {
-            peerConnection.close(); 
-            peerConnection = null;
-        }
-        
-        if (discovery != null) {
-            discovery.unregisterSignalHandler(this.connectionId);
-        }
-
-        this.connectionId = ThreadLocalRandom.current().nextLong();
-        
-        log.debug("Retrying connection with new Connection ID: {}", this.connectionId);
-        eventLoop().execute(() -> startHandshake(this.remoteAddress));
-    }
-
     private class NetherNetClientUnsafe extends AbstractUnsafe {
         @Override
         public void connect(SocketAddress remote, SocketAddress local, ChannelPromise promise) {
-            if (!promise.setUncancellable() || !ensureOpen(promise)) {
-                return;
-            }
-
-            if (!(remote instanceof InetSocketAddress)) {
-                promise.setFailure(new IllegalArgumentException("Unsupported address type"));
-                return;
-            }
-
-            if (local instanceof InetSocketAddress) {
-                NetherNetClientChannel.this.localAddress = (InetSocketAddress) local;
-            }
-            
-            InetSocketAddress remoteAddress = (InetSocketAddress) remote;
-            NetherNetClientChannel.this.remoteAddress = remoteAddress;
-
+            if (!promise.setUncancellable() || !ensureOpen(promise)) return;
             NetherNetClientChannel.this.connectPromise = promise;
 
-            eventLoop().execute(() -> startHandshake(remoteAddress));
-        }
-    }
-    
-    private void startHandshake(InetSocketAddress remoteAddress) {
-        try {
-            log.debug("Initializing WebRTC native components...");
-
-            if (!discovery.isActive()) {
-                log.debug("Binding discovery socket...");
-                if (this.localAddress != null) {
-                    discovery.bind(new InetSocketAddress(this.localAddress.getAddress(), 0));
-                } else {
-                    discovery.bind(0);
-                }
+            if (remote instanceof NetherNetAddress) {
+                String targetId = ((NetherNetAddress) remote).getNetworkId();
+                NetherNetClientChannel.this.setTargetNetworkId(targetId);
+                NetherNetClientChannel.this.remoteAddress = remote;
+            } else if (remote instanceof InetSocketAddress) {
+                NetherNetClientChannel.this.remoteAddress = (InetSocketAddress) remote;
+                NetherNetClientChannel.this.setTargetNetworkId("0"); // "0" triggers auto-discovery in signaling
+            } else {
+                promise.setFailure(new IllegalArgumentException("Unsupported address: " + remote.getClass()));
+                return;
             }
 
-            log.debug("Creating RTCPeerConnection...");
-            RTCConfiguration rtcConfig = new RTCConfiguration();
-            rtcConfig.bundlePolicy = RTCBundlePolicy.MAX_BUNDLE;
-
-            PortAllocatorConfig allocatorConfig = new PortAllocatorConfig();
-            allocatorConfig.setDisableAdapterEnumeration(true);
-            allocatorConfig.setDisableTcp(true);
-            rtcConfig.portAllocatorConfig = allocatorConfig;
-
-            peerConnection = factory.createPeerConnection(rtcConfig, new PeerConnectionObserver() {
-                @Override
-                public void onIceCandidate(RTCIceCandidate candidate) {
-                    discovery.sendSignal(remoteAddress, 0, 
-                        NetherNetConstants.SIGNAL_CANDIDATE_ADD + " " + connectionId + " " + candidate.sdp);
-                }
-
-                @Override
-                public void onConnectionChange(RTCPeerConnectionState state) {
-                    log.debug("WebRTC Connection State: {}", state);
-                    if (state == RTCPeerConnectionState.FAILED) {
-                        close();
-                    }
-                }
-
-                @Override public void onDataChannel(RTCDataChannel dataChannel) { }
-            });
-
-            log.debug("Creating Data Channels...");
-            RTCDataChannelInit reliableInit = new RTCDataChannelInit();
-            reliableInit.ordered = true;
-            reliableInit.protocol = NetherNetConstants.RELIABLE_CHANNEL_LABEL;
-            
-            RTCDataChannelInit unreliableInit = new RTCDataChannelInit();
-            unreliableInit.ordered = false;
-            unreliableInit.maxRetransmits = 0;
-            
-            RTCDataChannel reliable = peerConnection.createDataChannel(NetherNetConstants.RELIABLE_CHANNEL_LABEL, reliableInit);
-            RTCDataChannel unreliable = peerConnection.createDataChannel(NetherNetConstants.UNRELIABLE_CHANNEL_LABEL, unreliableInit);
-
-            reliable.registerObserver(new RTCDataChannelObserver() {
-                @Override
-                public void onStateChange() {
-                    if (reliable.getState() == RTCDataChannelState.OPEN) {
-                        // Switch back to Netty Thread to complete the connection safely
-                        eventLoop().execute(() -> {
-                            if (!handshakeComplete) {
-                                log.debug("NetherNet Connection Fully Established (via Observer).");
-                                handshakeComplete = true;
-
-                                setDataChannels(reliable, unreliable);
-
-                                if (connectPromise != null && !connectPromise.isDone()) {
-                                    connectPromise.trySuccess();
-                                }
-                                pipeline().fireChannelActive();
-                            }
-                        });
-                    }
-                }
-
-                @Override public void onBufferedAmountChange(long previousAmount) {}
-                @Override public void onMessage(RTCDataChannelBuffer buffer) {
-                    // This shouldn't happen during handshake, but if it does, release the buffer to avoid leaks.
-                    // Real data handling happens after setDataChannels swaps the observer.
-                    ReferenceCountUtil.release(buffer); 
-                }
-            });
-
-            discovery.registerSignalHandler(connectionId, (signal) -> {
-                String[] parts = signal.split(" ", 3);
-                if (parts.length < 3) return;
-                String type = parts[0];
-                String data = parts[2];
-
-                eventLoop().execute(() -> {
-                    switch (type) {
-                        case NetherNetConstants.SIGNAL_CONNECT_RESPONSE:
-                            log.debug("Received CONNECT_RESPONSE (Answer)");
-                            peerConnection.setRemoteDescription(
-                                new RTCSessionDescription(RTCSdpType.ANSWER, data), 
-                                new SetSessionDescriptionObserver() {
-                                    @Override public void onSuccess() {}
-                                    @Override public void onFailure(String error) {
-                                        log.error("RemoteDesc error: {}", error);
-                                        close();
-                                    }
-                                }
-                            );
-                            break;
-                        case NetherNetConstants.SIGNAL_CANDIDATE_ADD:
-                            peerConnection.addIceCandidate(new RTCIceCandidate("0", 0, data));
-                            break;
-                        case NetherNetConstants.SIGNAL_CONNECT_ERROR:
-                            log.error("Received CONNECT_ERROR from server: {}", data);
-                            close();
-                            break;
-                    }
-                });
-            });
-
-            log.debug("Creating Offer...");
-            peerConnection.createOffer(new RTCOfferOptions(), new CreateSessionDescriptionObserver() {
-                @Override
-                public void onSuccess(RTCSessionDescription description) {
-                    peerConnection.setLocalDescription(description, new SetSessionDescriptionObserver() {
-                        @Override
-                        public void onSuccess() {
-                            performDiscoveryAndConnect(remoteAddress, description.sdp);
-                        }
-                        @Override public void onFailure(String error) {
-                            log.error("LocalDesc error: {}", error);
-                            close();
-                        }
-                    });
-                }
-                @Override public void onFailure(String error) {
-                    log.error("CreateOffer error: {}", error);
-                    close();
-                }
-            });
-
-        } catch (Exception e) {
-            log.error("Handshake initialization failed", e);
-            close();
+            eventLoop().execute(() -> startHandshake());
         }
     }
 
-    private void performDiscoveryAndConnect(InetSocketAddress remote, String offerSdp) {
-        log.debug("Sending Discovery Request to {}", remote);
+    private void startHandshake() {
+        if (!isOpen() || handshakeComplete) return;
+
+        log.debug("Starting Handshake with Connection ID: {}", connectionId);
 
         if (handshakeTimeoutTask != null) handshakeTimeoutTask.cancel(false);
         handshakeTimeoutTask = eventLoop().schedule(() -> {
             if (!handshakeComplete) {
+                log.info("Handshake timed out. Resetting and Retrying...");
                 resetAndRetryHandshake();
             }
         }, HANDSHAKE_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
-        discovery.sendDiscoveryRequest(remote, (serverNetworkId, payload) -> {
+        signaling.setSignalHandler(connectionId, this::handleSignal);
+
+        signaling.connect(remoteAddress).thenAcceptAsync(iceServers -> {
+            if (handshakeComplete) return; 
             try {
-                log.debug("Found Server NetworkID: {}", serverNetworkId);
-                discovery.sendSignal(
-                    remote, 
-                    serverNetworkId, 
-                    NetherNetConstants.SIGNAL_CONNECT_REQUEST + " " + connectionId + " " + offerSdp
-                );
-            } finally {
-                ReferenceCountUtil.release(payload);
+                // If this is a retry, peerConnection might be null, so we recreate it
+                if (peerConnection == null) {
+                    initWebRTC(iceServers);
+                    createAndSendOffer();
+                }
+            } catch (Exception e) {
+                log.error("WebRTC Init failed", e);
+                // We don't fail promise here; we let the timeout task trigger a retry
             }
-        });        
+        }, eventLoop()).exceptionally(e -> {
+            log.error("Signaling connection failed", e);
+            // Again, let timeout handle the retry loop
+            return null;
+        });
+    }
+
+    private void resetAndRetryHandshake() {
+        if (!isOpen()) return;
+
+        if (peerConnection != null) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+
+        // Generate new ID for the new attempt
+        this.connectionId = ThreadLocalRandom.current().nextLong();
+        
+        // Restart flow
+        startHandshake();
+    }
+
+    private void initWebRTC(List<NetherNetSignaling.IceServerInfo> iceServers) {
+        RTCConfiguration rtcConfig = new RTCConfiguration();
+        rtcConfig.bundlePolicy = RTCBundlePolicy.MAX_BUNDLE;
+
+        if (iceServers != null) {
+            for (NetherNetSignaling.IceServerInfo info : iceServers) {
+                RTCIceServer iceServer = new RTCIceServer();
+                iceServer.urls = info.urls;
+                iceServer.username = info.username;
+                iceServer.password = info.password;
+                rtcConfig.iceServers.add(iceServer);
+            }
+        }
+
+        peerConnection = factory.createPeerConnection(rtcConfig, new PeerConnectionObserver() {
+            @Override
+            public void onIceCandidate(RTCIceCandidate candidate) {
+                // Wait until we have the ufrag (usually available immediately after createOffer)
+                if (localUfrag == null) {
+                    log.warn("Generated ICE candidate before local ufrag was available. Skipping.");
+                    return;
+                }
+
+                String sdp = candidate.sdp.trim();
+                
+                // Format: <StandardSDP> ufrag <LocalUfrag> network-id <LocalNetworkID> network-cost 0
+                StringBuilder sb = new StringBuilder(sdp);
+                sb.append(" ufrag ").append(localUfrag);
+                sb.append(" network-id ").append(signaling.getLocalNetworkId());
+                sb.append(" network-cost 0");
+
+                String payload = NetherNetConstants.SIGNAL_CANDIDATE_ADD + " " + connectionId + " " + sb.toString();
+                signaling.sendSignal(targetNetworkId, payload);
+            }
+
+            @Override
+            public void onConnectionChange(RTCPeerConnectionState state) {
+                if (state == RTCPeerConnectionState.FAILED) {
+                    // Fast fail trigger: retry immediately instead of waiting for timeout
+                    eventLoop().execute(() -> {
+                        if (!handshakeComplete) resetAndRetryHandshake();
+                    });
+                }
+            }
+
+            @Override public void onDataChannel(RTCDataChannel dataChannel) { }
+        });
+
+        setupDataChannels();
+    }
+
+    private String extractUfrag(String sdp) {
+        if (sdp == null) return "";
+        for (String line : sdp.split("\\r?\\n")) {
+            line = line.trim();
+            if (line.startsWith("a=ice-ufrag:")) {
+                return line.substring("a=ice-ufrag:".length()).trim();
+            }
+            // Some implementations might omit 'a='
+            if (line.startsWith("ice-ufrag:")) {
+                return line.substring("ice-ufrag:".length()).trim();
+            }
+        }
+        log.warn("Could not find ice-ufrag in local SDP!");
+        return "";
+    }
+
+    private void createAndSendOffer() {
+        if (peerConnection == null) return;
+        peerConnection.createOffer(new RTCOfferOptions(), new CreateSessionDescriptionObserver() {
+            @Override
+            public void onSuccess(RTCSessionDescription description) {
+                if (peerConnection == null) return;
+                NetherNetClientChannel.this.localUfrag = extractUfrag(description.sdp);
+                peerConnection.setLocalDescription(description, new SetSessionDescriptionObserver() {
+                    @Override
+                    public void onSuccess() {
+                        String payload = NetherNetConstants.SIGNAL_CONNECT_REQUEST + " " + connectionId + " " + description.sdp;
+                        signaling.sendSignal(targetNetworkId, payload);
+                    }
+                    @Override public void onFailure(String error) { /* Retry handled by timeout */ }
+                });
+            }
+            @Override public void onFailure(String error) { /* Retry handled by timeout */ }
+        });
+    }
+
+    private void handleSignal(String signal) {
+        String[] parts = signal.split(" ", 3);
+        if (parts.length < 3) return;
+        String type = parts[0];
+        String data = parts[2];
+
+        eventLoop().execute(() -> {
+            if (peerConnection == null) return;
+            switch (type) {
+                case NetherNetConstants.SIGNAL_CONNECT_RESPONSE:
+                    peerConnection.setRemoteDescription(new RTCSessionDescription(RTCSdpType.ANSWER, data), new SetSessionDescriptionObserver() {
+                        @Override public void onSuccess() {}
+                        @Override public void onFailure(String e) { /* Retry handled by timeout */ }
+                    });
+                    break;
+                case NetherNetConstants.SIGNAL_CANDIDATE_ADD:
+                    peerConnection.addIceCandidate(new RTCIceCandidate("0", 0, data));
+                    break;
+                case NetherNetConstants.SIGNAL_CONNECT_ERROR:
+                    // Server rejected us (e.g. offline). Reset immediately.
+                    resetAndRetryHandshake();
+                    break;
+            }
+        });
+    }
+
+    private void setupDataChannels() {
+        RTCDataChannelInit reliableInit = new RTCDataChannelInit();
+        reliableInit.ordered = true;
+        reliableInit.protocol = NetherNetConstants.RELIABLE_CHANNEL_LABEL;
+
+        RTCDataChannelInit unreliableInit = new RTCDataChannelInit();
+        unreliableInit.ordered = false;
+        unreliableInit.maxRetransmits = 0;
+
+        RTCDataChannel reliable = peerConnection.createDataChannel(NetherNetConstants.RELIABLE_CHANNEL_LABEL, reliableInit);
+        RTCDataChannel unreliable = peerConnection.createDataChannel(NetherNetConstants.UNRELIABLE_CHANNEL_LABEL, unreliableInit);
+
+        reliable.registerObserver(new RTCDataChannelObserver() {
+            @Override
+            public void onStateChange() {
+                if (reliable.getState() == RTCDataChannelState.OPEN) {
+                    eventLoop().execute(() -> {
+                        if (!handshakeComplete) {
+                            log.info("NetherNet Connection Established!");
+                            handshakeComplete = true;
+                            
+                            // Cancel timeout now that we are done
+                            if (handshakeTimeoutTask != null) {
+                                handshakeTimeoutTask.cancel(false);
+                            }
+                            
+                            setDataChannels(reliable, unreliable);
+                            if (connectPromise != null && !connectPromise.isDone()) {
+                                connectPromise.trySuccess();
+                            }
+                            pipeline().fireChannelActive();
+                        }
+                    });
+                }
+            }
+            @Override public void onBufferedAmountChange(long previousAmount) {}
+            @Override public void onMessage(RTCDataChannelBuffer buffer) {
+                ReferenceCountUtil.release(buffer);
+            }
+        });
     }
 }
