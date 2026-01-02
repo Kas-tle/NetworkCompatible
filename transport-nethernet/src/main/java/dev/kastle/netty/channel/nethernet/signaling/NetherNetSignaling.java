@@ -1,16 +1,9 @@
 package dev.kastle.netty.channel.nethernet.signaling;
 
-import java.net.SocketAddress;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 public interface NetherNetSignaling extends AutoCloseable {
-
-    /**
-     * Connects to the signaling medium.
-     */
-    CompletableFuture<List<IceServerInfo>> connect(SocketAddress remoteAddress);
 
     /**
      * Sends a signaling message to the remote peer.
@@ -21,6 +14,8 @@ public interface NetherNetSignaling extends AutoCloseable {
     void sendSignal(String targetNetworkId, String data);
 
     void setSignalHandler(long connectionId, Consumer<String> handler);
+
+    void removeSignalHandler(long connectionId);
 
     /**
      * Returns the Local Network ID of this client as a String.

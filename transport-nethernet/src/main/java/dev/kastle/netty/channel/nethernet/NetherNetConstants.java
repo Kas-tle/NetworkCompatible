@@ -111,4 +111,16 @@ public class NetherNetConstants {
 
         return payload;
     }
+
+    public static String buildSignalConnectRequest(long connectionId, String sdp) {
+        return SIGNAL_CONNECT_REQUEST + " " + Long.toUnsignedString(connectionId) + " " + sdp;
+    }
+
+    public static String buildSignalConnectResponse(long connectionId, String sdp) {
+        return SIGNAL_CONNECT_RESPONSE + " " + Long.toUnsignedString(connectionId) + " " + sdp;
+    }
+
+    public static String buildSignalCandidateAdd(long connectionId, String candidateSdp) {
+        return SIGNAL_CANDIDATE_ADD + " " + Long.toUnsignedString(connectionId) + " " + candidateSdp;
+    }
 }

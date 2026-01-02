@@ -1,6 +1,7 @@
 package dev.kastle.netty.channel.nethernet;
 
 import dev.kastle.netty.channel.nethernet.config.NetherNetAddress;
+import dev.kastle.netty.channel.nethernet.signaling.NetherNetClientSignaling;
 import dev.kastle.netty.channel.nethernet.signaling.NetherNetSignaling;
 import dev.kastle.webrtc.CreateSessionDescriptionObserver;
 import dev.kastle.webrtc.PeerConnectionFactory;
@@ -36,7 +37,7 @@ public class NetherNetClientChannel extends NetherNetChannel {
     private static final InternalLogger log = InternalLoggerFactory.getInstance(NetherNetClientChannel.class);
 
     private final PeerConnectionFactory factory;    
-    private final NetherNetSignaling signaling;
+    private final NetherNetClientSignaling signaling;
 
     private volatile long connectionId; // Session ID (Long)
     private volatile String targetNetworkId; // Peer ID (String, for Realms)
@@ -50,15 +51,15 @@ public class NetherNetClientChannel extends NetherNetChannel {
 
     private volatile String localUfrag;
     
-    public NetherNetClientChannel(NetherNetSignaling signaling) {
+    public NetherNetClientChannel(NetherNetClientSignaling signaling) {
         this(new PeerConnectionFactory(), signaling);
     }
 
-    public NetherNetClientChannel(PeerConnectionFactory factory, NetherNetSignaling signaling) {
+    public NetherNetClientChannel(PeerConnectionFactory factory, NetherNetClientSignaling signaling) {
         super(null, null, null);
         this.factory = factory;
         this.signaling = signaling;
-        this.connectionId = ThreadLocalRandom.current().nextLong();
+        this.connectionId = this.cycleConnectionId();
     }
 
     public void setTargetNetworkId(String id) {
@@ -76,7 +77,10 @@ public class NetherNetClientChannel extends NetherNetChannel {
         if (handshakeTimeoutTask != null) {
             handshakeTimeoutTask.cancel(false);
         }
-        if (signaling != null) signaling.close();
+        if (signaling != null) {
+            signaling.removeSignalHandler(this.connectionId);
+            signaling.close();
+        }
         if (connectPromise != null && !connectPromise.isDone()) {
             connectPromise.tryFailure(new ClosedChannelException());
         }
@@ -112,17 +116,17 @@ public class NetherNetClientChannel extends NetherNetChannel {
     private void startHandshake() {
         if (!isOpen() || handshakeComplete) return;
 
-        log.debug("Starting Handshake with Connection ID: {}", connectionId);
+        log.debug("Starting Handshake with Connection ID: {}", Long.toUnsignedString(this.connectionId));
 
         if (handshakeTimeoutTask != null) handshakeTimeoutTask.cancel(false);
         handshakeTimeoutTask = eventLoop().schedule(() -> {
             if (!handshakeComplete) {
-                log.info("Handshake timed out. Resetting and Retrying...");
+                log.debug("Handshake timed out. Resetting and Retrying...");
                 resetAndRetryHandshake();
             }
         }, HANDSHAKE_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
-        signaling.setSignalHandler(connectionId, this::handleSignal);
+        signaling.setSignalHandler(this.connectionId, this::handleSignal);
 
         signaling.connect(remoteAddress).thenAcceptAsync(iceServers -> {
             if (handshakeComplete) return; 
@@ -151,8 +155,11 @@ public class NetherNetClientChannel extends NetherNetChannel {
             peerConnection = null;
         }
 
+        // Remove handler for the failed connection ID
+        signaling.removeSignalHandler(this.connectionId);
+
         // Generate new ID for the new attempt
-        this.connectionId = ThreadLocalRandom.current().nextLong();
+        this.cycleConnectionId();
         
         // Restart flow
         startHandshake();
@@ -189,8 +196,10 @@ public class NetherNetClientChannel extends NetherNetChannel {
                 sb.append(" network-id ").append(signaling.getLocalNetworkId());
                 sb.append(" network-cost 0");
 
-                String payload = NetherNetConstants.SIGNAL_CANDIDATE_ADD + " " + connectionId + " " + sb.toString();
-                signaling.sendSignal(targetNetworkId, payload);
+                signaling.sendSignal(
+                    targetNetworkId, 
+                    NetherNetConstants.buildSignalCandidateAdd(connectionId, sb.toString())
+                );
             }
 
             @Override
@@ -235,8 +244,10 @@ public class NetherNetClientChannel extends NetherNetChannel {
                 peerConnection.setLocalDescription(description, new SetSessionDescriptionObserver() {
                     @Override
                     public void onSuccess() {
-                        String payload = NetherNetConstants.SIGNAL_CONNECT_REQUEST + " " + connectionId + " " + description.sdp;
-                        signaling.sendSignal(targetNetworkId, payload);
+                        signaling.sendSignal(
+                            targetNetworkId, 
+                            NetherNetConstants.buildSignalConnectRequest(connectionId, description.sdp)
+                        );
                     }
                     @Override public void onFailure(String error) { /* Retry handled by timeout */ }
                 });
@@ -247,26 +258,41 @@ public class NetherNetClientChannel extends NetherNetChannel {
 
     private void handleSignal(String signal) {
         String[] parts = signal.split(" ", 3);
-        if (parts.length < 3) return;
+        if (parts.length < 2) return; // Allow length 2 for ERROR packets without payload
         String type = parts[0];
-        String data = parts[2];
+        String idStr = parts[1].trim();
+        String data = parts.length > 2 ? parts[2] : "";
+
+        // Verify this signal belongs to the current attempt
+        try {
+            long signalId = Long.parseUnsignedLong(idStr);
+            if (signalId != this.connectionId) {
+                log.debug("Ignored stale signal for ID {}", idStr);
+                return;
+            }
+        } catch (NumberFormatException e) {
+            return;
+        }
 
         eventLoop().execute(() -> {
             if (peerConnection == null) return;
+            if (!isOpen() || handshakeComplete) return;
+
             switch (type) {
-                case NetherNetConstants.SIGNAL_CONNECT_RESPONSE:
+                case NetherNetConstants.SIGNAL_CONNECT_RESPONSE -> {
                     peerConnection.setRemoteDescription(new RTCSessionDescription(RTCSdpType.ANSWER, data), new SetSessionDescriptionObserver() {
                         @Override public void onSuccess() {}
                         @Override public void onFailure(String e) { /* Retry handled by timeout */ }
                     });
-                    break;
-                case NetherNetConstants.SIGNAL_CANDIDATE_ADD:
+                }
+                case NetherNetConstants.SIGNAL_CANDIDATE_ADD -> {
                     peerConnection.addIceCandidate(new RTCIceCandidate("0", 0, data));
-                    break;
-                case NetherNetConstants.SIGNAL_CONNECT_ERROR:
+                }
+                case NetherNetConstants.SIGNAL_CONNECT_ERROR -> {
                     // Server rejected us (e.g. offline). Reset immediately.
+                    log.debug("Received SIGNAL_CONNECT_ERROR for {}", Long.toUnsignedString(this.connectionId));
                     resetAndRetryHandshake();
-                    break;
+                }
             }
         });
     }
@@ -289,7 +315,7 @@ public class NetherNetClientChannel extends NetherNetChannel {
                 if (reliable.getState() == RTCDataChannelState.OPEN) {
                     eventLoop().execute(() -> {
                         if (!handshakeComplete) {
-                            log.info("NetherNet Connection Established!");
+                            log.debug("NetherNet Connection Established!");
                             handshakeComplete = true;
                             
                             // Cancel timeout now that we are done
@@ -311,5 +337,10 @@ public class NetherNetClientChannel extends NetherNetChannel {
                 ReferenceCountUtil.release(buffer);
             }
         });
+    }
+
+    private long cycleConnectionId() {
+        this.connectionId = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
+        return this.connectionId;
     }
 }

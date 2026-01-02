@@ -1,7 +1,7 @@
 package dev.kastle.netty.channel.nethernet;
 
 import dev.kastle.netty.channel.nethernet.config.NetherNetChannelConfig;
-import dev.kastle.netty.channel.nethernet.signaling.NetherNetDiscovery;
+import dev.kastle.netty.channel.nethernet.signaling.NetherNetServerSignaling;
 import dev.kastle.webrtc.CreateSessionDescriptionObserver;
 import dev.kastle.webrtc.PeerConnectionFactory;
 import dev.kastle.webrtc.PeerConnectionObserver;
@@ -24,7 +24,6 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class NetherNetServerChannel extends AbstractServerChannel {
     private static final InternalLogger log = InternalLoggerFactory.getInstance(NetherNetServerChannel.class);
@@ -32,22 +31,17 @@ public class NetherNetServerChannel extends AbstractServerChannel {
 
     private final NetherNetChannelConfig config = new NetherNetChannelConfig(this);
     private final PeerConnectionFactory factory;
+    private final NetherNetServerSignaling signaling;
     
-    private NetherNetDiscovery discovery;
     private InetSocketAddress localAddress;
-    private long networkId;
 
-    public NetherNetServerChannel() {
-        this(new PeerConnectionFactory());
+    public NetherNetServerChannel(NetherNetServerSignaling signaling) {
+        this(new PeerConnectionFactory(), signaling);
     }
 
-    public NetherNetServerChannel(PeerConnectionFactory factory) {
-        this(ThreadLocalRandom.current().nextLong(), factory);
-    }
-
-    public NetherNetServerChannel(long networkId, PeerConnectionFactory factory) {
+    public NetherNetServerChannel(PeerConnectionFactory factory, NetherNetServerSignaling signaling) {
         this.factory = factory;
-        this.networkId = networkId;
+        this.signaling = signaling;
     }
 
     @Override
@@ -55,65 +49,35 @@ public class NetherNetServerChannel extends AbstractServerChannel {
         if (!(localAddress instanceof InetSocketAddress)) throw new IllegalArgumentException("Unsupported address type");
         this.localAddress = (InetSocketAddress) localAddress;
         
-        this.discovery = new NetherNetDiscovery(this.networkId);
-        
-        this.discovery.setNewConnectionHandler((connectionId, offerSdp) -> {
-            // TODO: extract the sender's network ID from the packet context
-            acceptConnection(connectionId, offerSdp, "0");
+        this.signaling.setNewConnectionHandler((connectionId, remoteNetworkId, offerSdp) -> {
+            acceptConnection(connectionId, offerSdp, remoteNetworkId);
         });
 
-        this.discovery.bind();
-        
-        // TODO: Make configurable
-        this.discovery.setPongData("NetherNet Server", "World", 1, 0, 10);
+        this.signaling.bind(localAddress);
     }
 
     public void acceptConnection(long connectionId, String offerSdp, String remoteNetworkId) {
         RTCConfiguration rtcConfig = new RTCConfiguration();
         rtcConfig.bundlePolicy = RTCBundlePolicy.MAX_BUNDLE;
 
-        RTCPeerConnection pc = factory.createPeerConnection(rtcConfig, new PeerConnectionObserver() {
-            @Override
-            public void onIceCandidate(RTCIceCandidate candidate) {
-                String candidateString = candidate.sdp;
-                discovery.sendSignal(localAddress, Long.parseLong(remoteNetworkId), 
-                    NetherNetConstants.SIGNAL_CANDIDATE_ADD + " " + connectionId + " " + candidateString);
-            }
-
-            @Override
-            public void onConnectionChange(RTCPeerConnectionState state) {
-                log.info("Connection {} state changed: {}", connectionId, state);
-                if (state == RTCPeerConnectionState.FAILED || state == RTCPeerConnectionState.CLOSED) {
-                    discovery.unregisterSignalHandler(connectionId);
-                }
-            }
-            
-            @Override
-            public void onDataChannel(RTCDataChannel dataChannel) {
-                // Server accepts channels created by client (handled in NetherNetChannel)
-            }
-        });
+        ServerPeerConnectionObserver observer = new ServerPeerConnectionObserver(connectionId, remoteNetworkId);
+        RTCPeerConnection pc = factory.createPeerConnection(rtcConfig, observer);
 
         NetherNetChildChannel child = new NetherNetChildChannel(this, pc, new InetSocketAddress(0), localAddress);
+        observer.setChildChannel(child);
         
         // Register Signal Handler
-        discovery.registerSignalHandler(connectionId, (signal) -> {
+        signaling.setSignalHandler(connectionId, (signal) -> {
             String[] parts = signal.split(" ", 3);
             if (parts.length < 3) return;
-            
             String type = parts[0];
             String data = parts[2];
 
             switch (type) {
-                case NetherNetConstants.SIGNAL_CANDIDATE_ADD:
-                    // Hardcode sdpMid to "0" and sdpMLineIndex to 0 based on NetherNet spec
-                    RTCIceCandidate candidate = new RTCIceCandidate("0", 0, data);
-                    pc.addIceCandidate(candidate);
-                    break;
-                case NetherNetConstants.SIGNAL_CONNECT_ERROR:
-                    log.error("Connection {} received error: {}", connectionId, data);
+                case NetherNetConstants.SIGNAL_CANDIDATE_ADD -> 
+                    pc.addIceCandidate(new RTCIceCandidate("0", 0, data));
+                case NetherNetConstants.SIGNAL_CONNECT_ERROR -> 
                     child.close();
-                    break;
             }
         });
 
@@ -127,30 +91,85 @@ public class NetherNetServerChannel extends AbstractServerChannel {
                         pc.setLocalDescription(description, new SetSessionDescriptionObserver() {
                             @Override
                             public void onSuccess() {
-                                discovery.sendSignal(localAddress, Long.parseLong(remoteNetworkId), 
-                                    NetherNetConstants.SIGNAL_CONNECT_RESPONSE + " " + connectionId + " " + description.sdp);
-                                
+                                signaling.sendSignal(
+                                    remoteNetworkId, 
+                                    NetherNetConstants.buildSignalConnectResponse(connectionId, description.sdp)
+                                );
                                 pipeline().fireChannelRead(child);
                             }
-                            @Override public void onFailure(String error) {
-                                log.error("Failed to set local description: {}", error);
-                            }
+                            @Override public void onFailure(String error) { log.error("SetLocalDesc failed: {}", error); }
                         });
                     }
-                    @Override public void onFailure(String error) {
-                        log.error("Failed to create answer: {}", error);
-                    }
+                    @Override public void onFailure(String error) { log.error("CreateAnswer failed: {}", error); }
                 });
             }
-            @Override public void onFailure(String error) {
-                log.error("Failed to set remote description (Offer): {}", error);
-            }
+            @Override public void onFailure(String error) { log.error("SetRemoteDesc failed: {}", error); }
         });
+    }
+
+    /**
+     * Observer to handle Data Channel creation from the client.
+     */
+    private class ServerPeerConnectionObserver implements PeerConnectionObserver {
+        private final long connectionId;
+        private final String remoteNetworkId;
+        private NetherNetChildChannel child;
+        
+        private RTCDataChannel reliable;
+        private RTCDataChannel unreliable;
+
+        public ServerPeerConnectionObserver(long connectionId, String remoteNetworkId) {
+            this.connectionId = connectionId;
+            this.remoteNetworkId = remoteNetworkId;
+        }
+
+        public void setChildChannel(NetherNetChildChannel child) {
+            this.child = child;
+            checkDataChannels();
+        }
+
+        @Override
+        public void onIceCandidate(RTCIceCandidate candidate) {
+            signaling.sendSignal(
+                remoteNetworkId, 
+                NetherNetConstants.buildSignalCandidateAdd(connectionId, candidate.sdp)
+            );
+        }
+
+        @Override
+        public void onConnectionChange(RTCPeerConnectionState state) {
+            log.debug("Connection {} state changed: {}", Long.toUnsignedString(this.connectionId), state);
+        }
+
+        @Override
+        public void onDataChannel(RTCDataChannel dataChannel) {
+            String label = dataChannel.getLabel();
+            log.debug("Received Data Channel: {}", label);
+            
+            if (NetherNetConstants.RELIABLE_CHANNEL_LABEL.equals(label)) {
+                this.reliable = dataChannel;
+            } else if (NetherNetConstants.UNRELIABLE_CHANNEL_LABEL.equals(label)) {
+                this.unreliable = dataChannel;
+            }
+            
+            checkDataChannels();
+        }
+        
+        private void checkDataChannels() {
+            if (child != null && reliable != null && unreliable != null) {
+                log.debug("Data Channels established for {}", Long.toUnsignedString(this.connectionId));
+                child.setDataChannels(reliable, unreliable);
+                
+                if (child.pipeline() != null) {
+                    child.pipeline().fireChannelActive();
+                }
+            }
+        }
     }
 
     @Override
     protected void doClose() throws Exception {
-        if (discovery != null) discovery.close();
+        signaling.close();
         factory.dispose();
     }
 
@@ -174,7 +193,7 @@ public class NetherNetServerChannel extends AbstractServerChannel {
     
     @Override 
     public boolean isOpen() { 
-        return discovery != null; 
+        return true;
     }
     
     @Override 

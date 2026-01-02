@@ -38,7 +38,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebSocketFrame> implements NetherNetSignaling {
+public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebSocketFrame> implements NetherNetClientSignaling, NetherNetServerSignaling {
     private static final InternalLogger log = InternalLoggerFactory.getInstance(NetherNetXboxSignaling.class);
     private static final Gson gson = new Gson();
 
@@ -51,6 +51,7 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
     private CompletableFuture<List<IceServerInfo>> connectFuture;
 
     private final Map<Long, Consumer<String>> handlers = new ConcurrentHashMap<>();
+    private NetherNetServerSignaling.NewConnectionHandler newConnectionHandler;
 
     public NetherNetXboxSignaling(String localNetworkId, String xboxToken) {
         this.localNetworkId = localNetworkId;
@@ -74,7 +75,17 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
 
     @Override
     public synchronized CompletableFuture<List<IceServerInfo>> connect(SocketAddress remoteAddress) {
-        // If already connecting or connected, return the existing future
+        // SocketAddress is ignored for Xbox Signaling Service connection
+        return connectInternal();
+    }
+
+    @Override
+    public void bind(SocketAddress localAddress) {
+        // SocketAddress is ignored, we connect to the WS URL derived from NetworkID
+        connectInternal();
+    }
+
+    private synchronized CompletableFuture<List<IceServerInfo>> connectInternal() {
         if (connectFuture != null) {
             return connectFuture;
         }
@@ -110,9 +121,20 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
     }
 
     @Override
+    public void setNewConnectionHandler(NetherNetServerSignaling.NewConnectionHandler handler) {
+        this.newConnectionHandler = handler;
+    }
+
+    @Override
+    public void setAdvertisementData(PongData pongData) {
+        // No-op for Xbox Signaling. 
+        // Advertisement is handled via the Session Directory service (PUT /session/...).
+    }
+
+    @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt == WebSocketClientProtocolHandler.ClientHandshakeStateEvent.HANDSHAKE_COMPLETE) {
-            log.info("NetherNet Signaling WebSocket Connected");
+            log.debug("NetherNet Signaling WebSocket Connected");
             startPingLoop(ctx);
         } else {
             super.userEventTriggered(ctx, evt);
@@ -144,6 +166,11 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
     }
 
     @Override
+    public void removeSignalHandler(long connectionId) {
+        this.handlers.remove(connectionId);
+    }
+
+    @Override
     protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame frame) {
         String text = frame.text();
         try {
@@ -152,24 +179,29 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
 
             int type = json.get("Type").getAsInt();
             switch (type) {
-                case 2: // Credentials
+                case 2 -> { // Credentials
                     if (json.has("Message") && !connectFuture.isDone()) {
                         connectFuture.complete(parseTurnServers(json.get("Message").getAsString()));
                     }
-                    break;
-                case 1: // Signal
+                }
+                case 1 -> { // Signal
+                    String sender = "0";
+                    if (json.has("From")) {
+                        sender = json.get("From").getAsString();
+                    }
+
                     if (json.has("Message")) {
                         String rawMsg = json.get("Message").getAsString();
-                        dispatchSignal(rawMsg);
-                    }
-                    break;
+                        dispatchSignal(sender, rawMsg);
+                    }   
+                }
             }
         } catch (Exception e) {
             log.error("Signaling error", e);
         }
     }
 
-    private void dispatchSignal(String rawMsg) {
+    private void dispatchSignal(String sender, String rawMsg) {
         // Format: TYPE CONNECTION_ID PAYLOAD
         try {
             String[] parts = rawMsg.split(" ", 3);
@@ -178,6 +210,9 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
                 Consumer<String> handler = handlers.get(connectionId);
                 if (handler != null) {
                     handler.accept(rawMsg);
+                } else if ("CONNECTREQUEST".equals(parts[0]) && newConnectionHandler != null) {
+                    String payload = parts.length > 2 ? parts[2] : "";
+                    newConnectionHandler.onConnect(connectionId, sender, payload);
                 }
             }
         } catch (Exception e) {

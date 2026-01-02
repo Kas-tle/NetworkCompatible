@@ -13,7 +13,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-public class NetherNetDiscoverySignaling implements NetherNetSignaling {
+public class NetherNetDiscoverySignaling implements NetherNetClientSignaling, NetherNetServerSignaling {
     private static final InternalLogger log = InternalLoggerFactory.getInstance(NetherNetDiscoverySignaling.class);
 
     private final NetherNetDiscovery discovery;
@@ -55,15 +55,15 @@ public class NetherNetDiscoverySignaling implements NetherNetSignaling {
         this.remoteAddress = (InetSocketAddress) remote;
 
         try {
-            if (!discovery.isActive()) {
+            if (!this.discovery.isActive()) {
                 log.info("Binding NetherNet Discovery to {}", bindAddress);
-                discovery.bind(bindAddress);
+                this.discovery.bind(bindAddress);
             }
 
             log.debug("Sending Discovery Request to {}", remote);
             
             // Send request and register the callback to capture the ID
-            discovery.sendDiscoveryRequest(this.remoteAddress, (serverNetworkId, payload) -> {
+            this.discovery.sendDiscoveryRequest(this.remoteAddress, (serverNetworkId, payload) -> {
                 try {
                     log.info("Discovery Response Received! Server NetworkID: {}", serverNetworkId);
                     
@@ -87,29 +87,50 @@ public class NetherNetDiscoverySignaling implements NetherNetSignaling {
     }
 
     @Override
-    public void sendSignal(String targetNetworkId, String data) {
-        if (remoteAddress == null) {
-            log.warn("Cannot send signal: Remote address not set (connect() not called?)");
-            return;
+    public void bind(SocketAddress localAddress) {
+        if (!this.discovery.isActive()) {
+            if (localAddress instanceof InetSocketAddress) {
+                this.discovery.bind((InetSocketAddress) localAddress);
+            } else {
+                this.discovery.bind(bindAddress);
+            }
         }
-        
-        // If the Channel passed '0' (unknown), use the one we discovered.
+    }
+
+    @Override
+    public void setNewConnectionHandler(NetherNetServerSignaling.NewConnectionHandler handler) {
+        this.discovery.setNewConnectionHandler(handler);
+    }
+
+    @Override
+    public void setAdvertisementData(PongData pongData) {
+        this.discovery.setPongData(pongData);
+    }
+
+    @Override
+    public void sendSignal(String targetNetworkId, String data) {
         String actualIdStr = targetNetworkId;
+
+        // If '0' is passed, try to use the discovered ID (Client Mode)
         if (actualIdStr == null || actualIdStr.equals("0")) {
             actualIdStr = discoveredServerId.get();
         }
 
         if (actualIdStr == null) {
-            log.warn("Cannot send signal: Unknown Server Network ID.");
+            log.warn("Cannot send signal: Unknown Network ID.");
             return;
         }
         
-        log.trace("Sending Signal to {} (ID: {}): {}", remoteAddress, actualIdStr, data);
         try {
-            // LAN protocol strictly requires a Long ID. 
-            // If we are trying to connect to a Realm (String ID) via LAN signaling, this is invalid configuration.
             long id = Long.parseUnsignedLong(actualIdStr);
-            discovery.sendSignal(remoteAddress, id, data);
+            
+            // If we have an explicit remote address (Client Mode), use it directly
+            if (remoteAddress != null) {
+                this.discovery.sendSignal(remoteAddress, id, data);
+            } else {
+                // Server Mode: Use the ID to find the address in the Discovery map
+                this.discovery.sendSignal(id, data);
+            }
         } catch (NumberFormatException e) {
             log.error("Cannot send LAN signal to non-numeric Network ID: {}", actualIdStr);
         }
@@ -117,11 +138,16 @@ public class NetherNetDiscoverySignaling implements NetherNetSignaling {
 
     @Override
     public void setSignalHandler(long connectionId, Consumer<String> handler) {
-        discovery.registerSignalHandler(connectionId, handler);
+        this.discovery.registerSignalHandler(connectionId, handler);
+    }
+
+    @Override
+    public void removeSignalHandler(long connectionId) {
+        this.discovery.unregisterSignalHandler(connectionId);
     }
 
     @Override
     public void close() {
-        discovery.close();
+        this.discovery.close();
     }
 }

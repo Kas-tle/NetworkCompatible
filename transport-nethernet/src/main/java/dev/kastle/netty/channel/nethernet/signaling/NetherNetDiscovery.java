@@ -1,9 +1,9 @@
 package dev.kastle.netty.channel.nethernet.signaling;
 
 import dev.kastle.netty.channel.nethernet.NetherNetConstants;
+import dev.kastle.netty.channel.nethernet.signaling.NetherNetServerSignaling.PongData;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -19,6 +19,7 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -30,9 +31,10 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
 
     private final long networkId;
     private final Map<Long, Consumer<String>> signalHandlers = new ConcurrentHashMap<>();
+    private final Map<Long, InetSocketAddress> peerAddresses = new ConcurrentHashMap<>();
     private Channel channel;
     private byte[] pongData;
-    private BiConsumer<Long, String> newConnectionHandler;
+    private NetherNetServerSignaling.NewConnectionHandler newConnectionHandler;
     private BiConsumer<Long, ByteBuf> discoveryCallback;
 
     public NetherNetDiscovery(long networkId) {
@@ -86,23 +88,23 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
         sendPacket(buf, target);
     }
 
-    public void setPongData(String serverName, String levelName, int gameType, int playerCount, int maxPlayerCount) {
+    public void setPongData(PongData data) {
         ByteBuf buf = Unpooled.buffer();
         buf.writeByte(4); // Version
-        writeString(buf, serverName);
-        writeString(buf, levelName);
-        buf.writeByte(gameType << 1); // Encoded as value << 1
-        buf.writeIntLE(playerCount);
-        buf.writeIntLE(maxPlayerCount);
-        buf.writeBoolean(false); // isEditorWorld
-        buf.writeBoolean(false); // Hardcore
-        buf.writeZero(2); // Unknown
-
+        writeString(buf, data.serverName());
+        writeString(buf, data.levelName());
+        buf.writeByte(data.gameType() << 1);
+        buf.writeIntLE(data.playerCount());
+        buf.writeIntLE(data.maxPlayerCount());
+        buf.writeBoolean(data.isEditorWorld());
+        buf.writeBoolean(data.isHardcore());
+        buf.writeByte(data.transportLayer() << 1);
+        buf.writeByte(data.connectionType() << 1);
         byte[] binaryData = new byte[buf.readableBytes()];
         buf.readBytes(binaryData);
         buf.release();
         
-        String hex = ByteBufUtil.hexDump(binaryData);
+        String hex = HexFormat.of().formatHex(binaryData);
         byte[] hexBytes = hex.getBytes(StandardCharsets.UTF_8);
         
         ByteBuf response = Unpooled.buffer();
@@ -122,7 +124,7 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
         this.signalHandlers.remove(connectionId);
     }
 
-    public void setNewConnectionHandler(BiConsumer<Long, String> handler) {
+    public void setNewConnectionHandler(NetherNetServerSignaling.NewConnectionHandler handler) {
         this.newConnectionHandler = handler;
     }
 
@@ -149,6 +151,16 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
         buf.writeBytes(dataBytes);
 
         sendPacket(buf, recipient);
+    }
+
+    // New sendSignal looking up Address from ID
+    public void sendSignal(long targetNetworkId, String data) {
+        InetSocketAddress recipient = peerAddresses.get(targetNetworkId);
+        if (recipient != null) {
+            sendSignal(recipient, targetNetworkId, data);
+        } else {
+            log.warn("Attempted to send signal to unknown peer: {}", targetNetworkId);
+        }
     }
 
     private void sendPacket(ByteBuf packetData, InetSocketAddress target) {
@@ -181,6 +193,7 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
         try {
             int packetId = decrypted.readUnsignedShortLE();
             long senderId = decrypted.readLongLE();
+
             decrypted.skipBytes(8); // Padding
 
             if (senderId == this.networkId) {
@@ -188,17 +201,19 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
                 return;
             }
 
+            peerAddresses.put(senderId, packet.sender());
+
             switch (packetId) {
-                case NetherNetConstants.ID_DISCOVERY_REQUEST:
+                case NetherNetConstants.ID_DISCOVERY_REQUEST -> {
                     log.trace("Handled discovery request from {}", packet.sender());
                     handleRequest(senderId, packet.sender());
-                    break;
-                case NetherNetConstants.ID_DISCOVERY_MESSAGE:
+                }
+                case NetherNetConstants.ID_DISCOVERY_MESSAGE -> {
                     log.trace("Handled discovery message from {}", packet.sender());
                     log.trace("Message Data: {}", decrypted.toString(StandardCharsets.UTF_8));
                     handleMessage(decrypted, senderId);
-                    break;
-                case NetherNetConstants.ID_DISCOVERY_RESPONSE:
+                }
+                case NetherNetConstants.ID_DISCOVERY_RESPONSE -> {
                     log.trace("Handled discovery response from {}", packet.sender());
                     if (discoveryCallback != null) {
                         log.trace("Response Data: {}", decrypted.toString(StandardCharsets.UTF_8));
@@ -206,7 +221,10 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
                         // We retain it because we are passing it out of the pipeline handler
                         discoveryCallback.accept(senderId, decrypted.retain());
                     }
-                    break;
+                }
+                default -> {
+                    log.debug("Received unknown discovery packet ID {} from {}", packetId, packet.sender());
+                }
             }
         } catch (Exception e) {
             log.debug("Error processing discovery packet from {}", packet.sender(), e);
@@ -229,10 +247,22 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
 
     private void handleMessage(ByteBuf data, long senderId) {
         long recipientId = data.readLongLE();
-        if (recipientId != this.networkId) return;
+
+        if (recipientId != this.networkId && recipientId != 0) {
+            log.trace("Ignoring message intended for {}, but I am {}", recipientId, this.networkId);
+            return;
+        }
 
         int len = data.readIntLE();
+        if (data.readableBytes() < len) {
+            log.trace("Malformed message: claimed length {} but only has {}", len, data.readableBytes());
+            return;
+        }
+
         String messageData = data.readCharSequence(len, StandardCharsets.UTF_8).toString();
+        if ("Ping".equals(messageData)) {
+            return;
+        }
 
         String[] parts = messageData.split(" ", 3);
         if (parts.length < 2) return;
@@ -242,14 +272,22 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
             long connectionId = Long.parseUnsignedLong(parts[1]);
             
             Consumer<String> handler = signalHandlers.get(connectionId);
+
             if (handler != null) {
                 handler.accept(messageData);
-            } else if (NetherNetConstants.SIGNAL_CONNECT_REQUEST.equals(type) && newConnectionHandler != null) {
-                String payload = parts.length > 2 ? parts[2] : "";
-                newConnectionHandler.accept(connectionId, payload);
+            } else if (NetherNetConstants.SIGNAL_CONNECT_REQUEST.equals(type)) {
+                if (newConnectionHandler != null) {
+                    String payload = parts.length > 2 ? parts[2] : "";
+                    log.trace("Dispatching New Connection: ID={} Sender={}", Long.toUnsignedString(connectionId), Long.toUnsignedString(senderId));
+                    newConnectionHandler.onConnect(connectionId, Long.toUnsignedString(senderId), payload);
+                } else {
+                    log.debug("Received CONNECT_REQUEST but no NewConnectionHandler is set!");
+                }
+            } else {
+                log.debug("Unhandled signal type: {}", type);
             }
         } catch (NumberFormatException e) {
-            // Invalid format
+            log.debug("Invalid connection ID format in message: {}", messageData);
         }
     }
 
