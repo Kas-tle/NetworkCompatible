@@ -1,6 +1,7 @@
 package dev.kastle.netty.channel.nethernet.signaling;
 
 import java.net.SocketAddress;
+import java.util.List;
 
 public interface NetherNetServerSignaling extends NetherNetSignaling {
     /**
@@ -22,6 +23,14 @@ public interface NetherNetServerSignaling extends NetherNetSignaling {
     @FunctionalInterface
     interface NewConnectionHandler {
         void onConnect(long connectionId, String remoteNetworkId, String payload);
+    }
+
+    /**
+     * Returns the ICE servers (STUN/TURN) obtained from the signaling handshake.
+     * Returns empty list if none available or not applicable.
+     */
+    default List<IceServerInfo> getIceServers() {
+        return java.util.Collections.emptyList();
     }
 
     /**

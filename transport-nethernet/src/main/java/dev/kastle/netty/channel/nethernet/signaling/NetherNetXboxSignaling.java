@@ -32,6 +32,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -53,6 +54,8 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
     private final Map<Long, Consumer<String>> handlers = new ConcurrentHashMap<>();
     private NetherNetServerSignaling.NewConnectionHandler newConnectionHandler;
 
+    private volatile List<IceServerInfo> iceServers = new ArrayList<>();
+
     public NetherNetXboxSignaling(String localNetworkId, String xboxToken) {
         this.localNetworkId = localNetworkId;
         this.xboxToken = xboxToken;
@@ -65,7 +68,7 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
     }
 
     public NetherNetXboxSignaling(String xboxToken) {
-        this(Long.toUnsignedString(ThreadLocalRandom.current().nextLong()), xboxToken);
+        this(Long.toUnsignedString(ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE)), xboxToken);
     }
 
     @Override
@@ -91,12 +94,16 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
         }
 
         connectFuture = new CompletableFuture<>();
+        connectFuture.thenAccept(servers -> this.iceServers = servers);
         
         try {
             SslContext sslCtx = SslContextBuilder.forClient().build();
             WebSocketClientHandshaker handshaker = WebSocketClientHandshakerFactory.newHandshaker(
                 uri, WebSocketVersion.V13, null, false, 
-                new DefaultHttpHeaders().add("Authorization", xboxToken)
+                new DefaultHttpHeaders()
+                    .add("Authorization", xboxToken)
+                    .add("Session-Id", UUID.randomUUID().toString())
+                    .add("Request-Id", UUID.randomUUID().toString())
             );
 
             Bootstrap b = new Bootstrap();
@@ -118,6 +125,10 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
             connectFuture.completeExceptionally(e);
         }
         return connectFuture;
+    }
+
+    public List<IceServerInfo> getIceServers() {
+        return this.iceServers;
     }
 
     @Override

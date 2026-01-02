@@ -2,6 +2,8 @@ package dev.kastle.netty.channel.nethernet;
 
 import dev.kastle.netty.channel.nethernet.config.NetherNetChannelConfig;
 import dev.kastle.netty.channel.nethernet.signaling.NetherNetServerSignaling;
+import dev.kastle.netty.channel.nethernet.signaling.NetherNetSignaling.IceServerInfo;
+import dev.kastle.netty.channel.nethernet.signaling.NetherNetXboxSignaling;
 import dev.kastle.webrtc.CreateSessionDescriptionObserver;
 import dev.kastle.webrtc.PeerConnectionFactory;
 import dev.kastle.webrtc.PeerConnectionObserver;
@@ -10,6 +12,7 @@ import dev.kastle.webrtc.RTCBundlePolicy;
 import dev.kastle.webrtc.RTCConfiguration;
 import dev.kastle.webrtc.RTCDataChannel;
 import dev.kastle.webrtc.RTCIceCandidate;
+import dev.kastle.webrtc.RTCIceServer;
 import dev.kastle.webrtc.RTCPeerConnection;
 import dev.kastle.webrtc.RTCPeerConnectionState;
 import dev.kastle.webrtc.RTCSdpType;
@@ -24,6 +27,7 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.List;
 
 public class NetherNetServerChannel extends AbstractServerChannel {
     private static final InternalLogger log = InternalLoggerFactory.getInstance(NetherNetServerChannel.class);
@@ -59,6 +63,18 @@ public class NetherNetServerChannel extends AbstractServerChannel {
     public void acceptConnection(long connectionId, String offerSdp, String remoteNetworkId) {
         RTCConfiguration rtcConfig = new RTCConfiguration();
         rtcConfig.bundlePolicy = RTCBundlePolicy.MAX_BUNDLE;
+
+        // Inject ICE servers if the signaling implementation supports it
+        if (this.signaling instanceof NetherNetXboxSignaling xboxSignaling) {
+            List<IceServerInfo> iceServers = xboxSignaling.getIceServers();
+            for (IceServerInfo info : iceServers) {
+                RTCIceServer iceServer = new RTCIceServer();
+                iceServer.urls = info.urls;
+                iceServer.username = info.username;
+                iceServer.password = info.password;
+                rtcConfig.iceServers.add(iceServer);
+            }
+        }
 
         ServerPeerConnectionObserver observer = new ServerPeerConnectionObserver(connectionId, remoteNetworkId);
         RTCPeerConnection pc = factory.createPeerConnection(rtcConfig, observer);
