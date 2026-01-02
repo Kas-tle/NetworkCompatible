@@ -22,57 +22,69 @@ import io.netty.util.AbstractReferenceCounted;
 import io.netty.util.IllegalReferenceCountException;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.ReferenceCounted;
+import io.netty.util.collection.IntObjectHashMap;
+import io.netty.util.collection.IntObjectMap;
 import org.cloudburstmc.netty.channel.raknet.packet.EncapsulatedPacket;
 
 import java.util.Objects;
 
 public class SplitPacketHelper extends AbstractReferenceCounted {
-    private final EncapsulatedPacket[] packets;
+    private final IntObjectMap<EncapsulatedPacket> packets;
+    private final int expectedLength;
     private final long created = System.currentTimeMillis();
 
     public SplitPacketHelper(long expectedLength) {
         if (expectedLength < 2) {
             throw new IllegalArgumentException("expectedLength must be greater than 1");
         }
-        if (expectedLength > 8192) {
-            throw new IllegalArgumentException("Too many split parts, expectedLength must be less than 8192");
+
+        if (expectedLength > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("expectedLength must be <= Integer.MAX_VALUE");
         }
-        this.packets = new EncapsulatedPacket[(int) expectedLength];
+
+        this.expectedLength = (int) expectedLength;
+        this.packets = new IntObjectHashMap<>();
     }
 
-    public EncapsulatedPacket add(EncapsulatedPacket packet, ByteBufAllocator alloc) {
+public EncapsulatedPacket add(EncapsulatedPacket packet, ByteBufAllocator alloc) {
         Objects.requireNonNull(packet, "packet cannot be null");
         if (!packet.isSplit()) throw new IllegalArgumentException("Packet is not split");
         if (this.refCnt() <= 0) throw new IllegalReferenceCountException(this.refCnt());
-        if (packet.getPartIndex() < 0 || packet.getPartIndex() >= this.packets.length) {
+        
+        int partIndex = packet.getPartIndex();
+        if (partIndex < 0 || partIndex >= this.expectedLength) {
             throw new IllegalArgumentException(String.format("Split packet part index out of range. Got %s, expected 0-%s",
-                    packet.getPartIndex(), this.packets.length - 1));
+                    partIndex, this.expectedLength - 1));
         }
 
-        int partIndex = packet.getPartIndex();
-        if (this.packets[partIndex] != null) {
-            // Duplicate
+        if (this.packets.containsKey(partIndex)) {
             return null;
         }
+        
         // Retain the packet so it can be reassembled later.
-        this.packets[partIndex] = packet.retain();
+        this.packets.put(partIndex, packet.retain());
 
-        int sz = 0;
-        for (EncapsulatedPacket netPacket : this.packets) {
-            if (netPacket == null) {
-                return null;
+        if (this.packets.size() == this.expectedLength) {
+            int sz = 0;
+            // Iterate by index to ensure we sum sizes and write bytes in the correct order
+            for (int i = 0; i < this.expectedLength; i++) {
+                EncapsulatedPacket netPacket = this.packets.get(i);
+                // netPacket should not be null here if size() == expectedLength and indices are verified
+                sz += netPacket.getBuffer().readableBytes();
             }
-            sz += netPacket.getBuffer().readableBytes();
+
+            // We can't use a composite buffer as the native code will choke on it
+            ByteBuf reassembled = alloc.ioBuffer(sz);
+            for (int i = 0; i < this.expectedLength; i++) {
+                EncapsulatedPacket netPacket = this.packets.get(i);
+                ByteBuf buf = netPacket.getBuffer();
+                reassembled.writeBytes(buf, buf.readerIndex(), buf.readableBytes());
+            }
+
+            return packet.fromSplit(reassembled);
         }
 
-        // We can't use a composite buffer as the native code will choke on it
-        ByteBuf reassembled = alloc.ioBuffer(sz);
-        for (EncapsulatedPacket netPacket : this.packets) {
-            ByteBuf buf = netPacket.getBuffer();
-            reassembled.writeBytes(buf, buf.readerIndex(), buf.readableBytes());
-        }
-
-        return packet.fromSplit(reassembled);
+        return null;
     }
 
     public boolean expired() {
@@ -82,11 +94,12 @@ public class SplitPacketHelper extends AbstractReferenceCounted {
         return System.currentTimeMillis() - created >= 30000;
     }
 
-    @Override
+@Override
     protected void deallocate() {
-        for (EncapsulatedPacket packet : this.packets) {
+        for (EncapsulatedPacket packet : this.packets.values()) {
             ReferenceCountUtil.release(packet);
         }
+        this.packets.clear();
     }
 
     @Override
