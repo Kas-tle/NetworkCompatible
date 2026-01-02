@@ -1,14 +1,5 @@
 description = "NetherNet transport for Netty"
 
-val nativePlatforms = listOf(
-    "windows-x86_64",
-    "windows-aarch64",
-    "linux-x86_64",
-    "linux-aarch64",
-    "macos-x86_64",
-    "macos-aarch64"
-)
-
 dependencies {
     api(libs.bundles.netty)
     api(libs.netty.codec.http)
@@ -16,13 +7,6 @@ dependencies {
     api(libs.webrtc.java)
 
     implementation(libs.gson)
-    nativePlatforms.forEach { platform ->
-        implementation(libs.webrtc.java) {
-            artifact {
-                classifier = platform
-            }
-        }
-    }
 
     testImplementation(libs.bundles.junit)
     testRuntimeOnly(libs.junit.platform.launcher) 
