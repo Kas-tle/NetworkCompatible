@@ -211,7 +211,7 @@ public class NetherNetServerChannel extends AbstractServerChannel {
 
     @Override
     protected void doClose() throws Exception {
-        open = false;
+        this.open = false;
         
         try {
             signaling.close();
@@ -240,7 +240,7 @@ public class NetherNetServerChannel extends AbstractServerChannel {
     
     @Override 
     public boolean isOpen() { 
-        return true;
+        return this.open;
     }
     
     @Override 
