@@ -38,6 +38,7 @@ public class NetherNetServerChannel extends AbstractServerChannel {
     private final NetherNetServerSignaling signaling;
     
     private InetSocketAddress localAddress;
+    private volatile boolean open = true;
 
     public NetherNetServerChannel(NetherNetServerSignaling signaling) {
         this(new PeerConnectionFactory(), signaling);
@@ -65,14 +66,22 @@ public class NetherNetServerChannel extends AbstractServerChannel {
         rtcConfig.bundlePolicy = RTCBundlePolicy.MAX_BUNDLE;
 
         // Inject ICE servers if the signaling implementation supports it
-        if (this.signaling instanceof NetherNetXboxSignaling xboxSignaling) {
+        if (this.signaling instanceof NetherNetXboxSignaling) {
+            NetherNetXboxSignaling xboxSignaling = (NetherNetXboxSignaling) this.signaling;
             List<IceServerInfo> iceServers = xboxSignaling.getIceServers();
-            for (IceServerInfo info : iceServers) {
-                RTCIceServer iceServer = new RTCIceServer();
-                iceServer.urls = info.urls;
-                iceServer.username = info.username;
-                iceServer.password = info.password;
-                rtcConfig.iceServers.add(iceServer);
+            
+            if (iceServers != null && !iceServers.isEmpty()) {
+                log.trace("Injecting {} ICE Servers into PeerConnection for {}", iceServers.size(), Long.toUnsignedString(connectionId));
+                for (IceServerInfo info : iceServers) {
+                    RTCIceServer iceServer = new RTCIceServer();
+                    iceServer.urls = info.urls;
+                    iceServer.username = info.username;
+                    iceServer.password = info.password;
+                    rtcConfig.iceServers.add(iceServer);
+                    log.trace(" - Added ICE Server: {} (User: {})", info.urls, info.username);
+                }
+            } else {
+                log.warn("NetherNetXboxSignaling has NO ICE servers available! WAN connections will likely fail.");
             }
         }
 
@@ -90,10 +99,14 @@ public class NetherNetServerChannel extends AbstractServerChannel {
             String data = parts[2];
 
             switch (type) {
-                case NetherNetConstants.SIGNAL_CANDIDATE_ADD -> 
+                case NetherNetConstants.SIGNAL_CANDIDATE_ADD -> {
+                    log.trace("Applying Remote Candidate for {}: {}", Long.toUnsignedString(connectionId), data);
                     pc.addIceCandidate(new RTCIceCandidate("0", 0, data));
-                case NetherNetConstants.SIGNAL_CONNECT_ERROR -> 
+                }
+                case NetherNetConstants.SIGNAL_CONNECT_ERROR -> {
+                    log.debug("Received CONNECT_ERROR for {}", Long.toUnsignedString(connectionId));
                     child.close();
+                }
             }
         });
 
@@ -101,12 +114,14 @@ public class NetherNetServerChannel extends AbstractServerChannel {
         pc.setRemoteDescription(new RTCSessionDescription(RTCSdpType.OFFER, offerSdp), new SetSessionDescriptionObserver() {
             @Override
             public void onSuccess() {
+                log.trace("Remote description set for {}", Long.toUnsignedString(connectionId));
                 pc.createAnswer(new RTCAnswerOptions(), new CreateSessionDescriptionObserver() {
                     @Override
                     public void onSuccess(RTCSessionDescription description) {
                         pc.setLocalDescription(description, new SetSessionDescriptionObserver() {
                             @Override
                             public void onSuccess() {
+                                log.trace("Sending Answer SDP for {}", Long.toUnsignedString(connectionId));
                                 signaling.sendSignal(
                                     remoteNetworkId, 
                                     NetherNetConstants.buildSignalConnectResponse(connectionId, description.sdp)
@@ -146,10 +161,21 @@ public class NetherNetServerChannel extends AbstractServerChannel {
 
         @Override
         public void onIceCandidate(RTCIceCandidate candidate) {
+            if (log.isTraceEnabled()) {
+                log.trace("Generated ICE Candidate for {}: {} (Type: {})", 
+                    Long.toUnsignedString(this.connectionId), candidate.sdp, extractCandidateType(candidate.sdp));
+            }
             signaling.sendSignal(
                 remoteNetworkId, 
                 NetherNetConstants.buildSignalCandidateAdd(connectionId, candidate.sdp)
             );
+        }
+
+        private String extractCandidateType(String sdp) {
+            if (sdp.contains(" typ host ")) return "host";
+            if (sdp.contains(" typ srflx ")) return "srflx";
+            if (sdp.contains(" typ relay ")) return "relay";
+            return "unknown";
         }
 
         @Override
@@ -185,8 +211,13 @@ public class NetherNetServerChannel extends AbstractServerChannel {
 
     @Override
     protected void doClose() throws Exception {
-        signaling.close();
-        factory.dispose();
+        open = false;
+        
+        try {
+            signaling.close();
+        } finally {
+            factory.dispose();
+        }
     }
 
     @Override
@@ -214,7 +245,7 @@ public class NetherNetServerChannel extends AbstractServerChannel {
     
     @Override 
     public boolean isActive() { 
-        return isOpen(); 
+        return isOpen() && localAddress0() != null;
     }
     
     @Override 

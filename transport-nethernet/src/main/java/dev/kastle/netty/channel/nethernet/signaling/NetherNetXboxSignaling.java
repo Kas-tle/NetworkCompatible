@@ -122,6 +122,7 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
 
             this.channel = b.connect(uri.getHost(), 443).sync().channel();
         } catch (Exception e) {
+            log.error("Failed to connect to signaling service", e);
             connectFuture.completeExceptionally(e);
         }
         return connectFuture;
@@ -168,6 +169,8 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
             msg.addProperty("To", targetNetworkId);
             msg.addProperty("Message", data);
             channel.writeAndFlush(new TextWebSocketFrame(gson.toJson(msg)));
+        } else {
+            log.debug("Attempted to send signal to {} but WebSocket is closed or null!", targetNetworkId);
         }
     }
 
@@ -208,7 +211,7 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
                 }
             }
         } catch (Exception e) {
-            log.error("Signaling error", e);
+            log.error("Signaling error processing frame: " + text, e);
         }
     }
 
@@ -235,23 +238,49 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
         List<IceServerInfo> result = new ArrayList<>();
         try {
             JsonObject root = gson.fromJson(jsonString, JsonObject.class);
+            
+            JsonArray servers = null;
             if (root.has("TurnAuthServers")) {
-                JsonArray servers = root.getAsJsonArray("TurnAuthServers");
+                servers = root.getAsJsonArray("TurnAuthServers");
+            } else if (root.has("turnAuthServers")) {
+                servers = root.getAsJsonArray("turnAuthServers");
+            }
+
+            if (servers != null) {
                 for (JsonElement el : servers) {
                     JsonObject server = el.getAsJsonObject();
+                    List<String> urls = new ArrayList<>();
+                    
+                    JsonArray urlsArray = null;
                     if (server.has("Urls")) {
-                        List<String> urls = new ArrayList<>();
-                        server.getAsJsonArray("Urls").forEach(u -> urls.add(u.getAsString()));
+                        urlsArray = server.getAsJsonArray("Urls");
+                    } else if (server.has("urls")) {
+                        urlsArray = server.getAsJsonArray("urls");
+                    }
+
+                    if (urlsArray != null) {
+                        urlsArray.forEach(u -> urls.add(u.getAsString()));
                         
                         IceServerInfo info = new IceServerInfo();
                         info.urls = urls;
+                        
                         if (server.has("Username")) info.username = server.get("Username").getAsString();
+                        else if (server.has("username")) info.username = server.get("username").getAsString();
+                        
                         if (server.has("Password")) info.password = server.get("Password").getAsString();
+                        else if (server.has("password")) info.password = server.get("password").getAsString();
+                        else if (server.has("Credential")) info.password = server.get("Credential").getAsString();
+                        else if (server.has("credential")) info.password = server.get("credential").getAsString();
+
                         result.add(info);
                     }
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            log.error("Failed to parse TURN servers", e);
+        }
+        
+        log.debug("Successfully parsed " + result.size() + " ICE servers.");
         return result;
     }
 
