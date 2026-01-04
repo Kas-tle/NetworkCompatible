@@ -26,7 +26,7 @@ public class DefaultNetherClientChannelConfig extends DefaultNetherChannelConfig
             return (T) Integer.valueOf(this.clientHandshakeTimeoutMs);
         }
 
-        return this.channel.parent().config().getOption(option);
+        return super.getOption(option);
     }
 
     @Override
@@ -37,7 +37,7 @@ public class DefaultNetherClientChannelConfig extends DefaultNetherChannelConfig
             this.setClientHandshakeTimeoutMs((Integer) value);
             return true;
         } else {
-            return this.channel.parent().config().setOption(option, value);
+            return super.setOption(option, value);
         }
     }
 

@@ -26,7 +26,7 @@ public class DefaultNetherServerChannelConfig extends DefaultNetherChannelConfig
             return (T) Integer.valueOf(this.serverRtcHandshakeTimeoutSeconds);
         }
 
-        return this.channel.parent().config().getOption(option);
+        return super.getOption(option);
     }
 
     @Override
@@ -37,7 +37,7 @@ public class DefaultNetherServerChannelConfig extends DefaultNetherChannelConfig
             this.setServerRtcHandshakeTimeoutSeconds((Integer) value);
             return true;
         } else {
-            return this.channel.parent().config().setOption(option, value);
+            return super.setOption(option, value);
         }
     }
 
