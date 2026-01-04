@@ -13,8 +13,19 @@ public interface NetherNetSignaling extends AutoCloseable {
      */
     void sendSignal(String targetNetworkId, String data);
 
+    /**
+     * Sets a handler to receive signaling messages for a specific connection ID.
+     *
+     * @param connectionId The connection ID to listen for.
+     * @param handler      The handler to process incoming signaling messages.
+     */
     void setSignalHandler(long connectionId, Consumer<String> handler);
 
+    /**
+     * Removes the signaling handler for a specific connection ID.
+     *
+     * @param connectionId The connection ID whose handler should be removed.
+     */
     void removeSignalHandler(long connectionId);
 
     /**
@@ -23,12 +34,43 @@ public interface NetherNetSignaling extends AutoCloseable {
      */
     String getLocalNetworkId();
 
+    /**
+     * Closes the signaling channel and releases any associated resources.
+     */
     @Override
     void close();
 
-    class IceServerInfo {
-        public String username;
-        public String password;
-        public List<String> urls;
+    /**
+     * Data structure for ICE server information.
+     *
+     * @param username The username for the ICE server (if applicable).
+     * @param password The password for the ICE server (if applicable).
+     * @param urls     The list of URLs for the ICE server.
+     */
+    public record IceServerInfo(String username, String password, List<String> urls) {
+        public static class Builder {
+            private String username = "";
+            private String password = "";
+            private List<String> urls = List.of();
+
+            public Builder setUsername(String username) {
+                this.username = username;
+                return this;
+            }
+
+            public Builder setPassword(String password) {
+                this.password = password;
+                return this;
+            }
+
+            public Builder setUrls(List<String> urls) {
+                this.urls = urls;
+                return this;
+            }
+
+            public IceServerInfo build() {
+                return new IceServerInfo(username, password, urls);
+            }
+        }
     }
 }

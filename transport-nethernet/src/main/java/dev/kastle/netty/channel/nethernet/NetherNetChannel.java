@@ -1,6 +1,6 @@
 package dev.kastle.netty.channel.nethernet;
 
-import dev.kastle.netty.channel.nethernet.config.NetherNetChannelConfig;
+import dev.kastle.netty.channel.nethernet.config.DefaultNetherChannelConfig;
 import dev.kastle.webrtc.RTCDataChannel;
 import dev.kastle.webrtc.RTCDataChannelBuffer;
 import dev.kastle.webrtc.RTCDataChannelObserver;
@@ -27,7 +27,7 @@ public abstract class NetherNetChannel extends AbstractChannel {
     private static final InternalLogger log = InternalLoggerFactory.getInstance(NetherNetChannel.class);
     protected static final ChannelMetadata METADATA = new ChannelMetadata(false);
 
-    protected final NetherNetChannelConfig config;
+    protected DefaultNetherChannelConfig config;
     protected volatile RTCPeerConnection peerConnection;
     protected volatile SocketAddress remoteAddress;
     protected volatile SocketAddress localAddress;
@@ -43,7 +43,7 @@ public abstract class NetherNetChannel extends AbstractChannel {
         super(parent);
         this.remoteAddress = remote;
         this.localAddress = local;
-        this.config = new NetherNetChannelConfig(this);
+        this.config = new DefaultNetherChannelConfig(this);
     }
 
     public void setDataChannels(RTCDataChannel reliable, RTCDataChannel unreliable) {

@@ -7,10 +7,10 @@ import io.netty.channel.DefaultChannelConfig;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class NetherNetChannelConfig extends DefaultChannelConfig {
+public class DefaultNetherChannelConfig extends DefaultChannelConfig {
     private final Map<ChannelOption<?>, Object> options = new ConcurrentHashMap<>();
 
-    public NetherNetChannelConfig(Channel channel) {
+    public DefaultNetherChannelConfig(Channel channel) {
         super(channel);
     }
 

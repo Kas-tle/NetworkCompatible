@@ -21,10 +21,24 @@ public class NetherNetChannelFactory<T extends Channel> implements ChannelFactor
         return channelCreator.get();
     }
 
+    /**
+     * Creates a NetherNet Server Channel Factory.
+     * 
+     * @param factory The PeerConnectionFactory to use for creating peer connections. Should be reused where possible.
+     * @param signaling The NetherNetServerSignaling instance for signaling.
+     * @return A ChannelFactory for NetherNetServerChannel.
+     */
     public static ChannelFactory<NetherNetServerChannel> server(PeerConnectionFactory factory, NetherNetServerSignaling signaling) {
         return new NetherNetChannelFactory<>(() -> new NetherNetServerChannel(factory, signaling));
     }
 
+    /**
+     * Creates a NetherNet Client Channel Factory.
+     * 
+     * @param factory The PeerConnectionFactory to use for creating peer connections. Should be reused where possible.
+     * @param signaling The NetherNetClientSignaling instance for signaling.
+     * @return A ChannelFactory for NetherNetClientChannel.
+     */
     public static ChannelFactory<NetherNetClientChannel> client(PeerConnectionFactory factory, NetherNetClientSignaling signaling) {
         return new NetherNetChannelFactory<>(() -> new NetherNetClientChannel(factory, signaling));
     }

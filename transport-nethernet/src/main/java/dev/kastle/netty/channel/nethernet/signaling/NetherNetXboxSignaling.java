@@ -56,10 +56,16 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
 
     private volatile List<IceServerInfo> iceServers = new ArrayList<>();
 
-    public NetherNetXboxSignaling(String localNetworkId, String xboxToken) {
-        this.localNetworkId = localNetworkId;
+    /**
+     * Creates a NetherNetXboxSignaling instance.
+     * 
+     * @param networkId The Network ID to use.
+     * @param xboxToken The Minecraft Bedrock Session authorization header ('MCToken ***').
+     */
+    public NetherNetXboxSignaling(String networkId, String xboxToken) {
+        this.localNetworkId = networkId;
         this.xboxToken = xboxToken;
-        this.uri = URI.create("wss://signal.franchise.minecraft-services.net/ws/v1.0/signaling/" + localNetworkId);
+        this.uri = URI.create("wss://signal.franchise.minecraft-services.net/ws/v1.0/signaling/" + networkId);
         this.eventLoopGroup = new NioEventLoopGroup(1);
     }
 
@@ -261,18 +267,18 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
                     if (urlsArray != null) {
                         urlsArray.forEach(u -> urls.add(u.getAsString()));
                         
-                        IceServerInfo info = new IceServerInfo();
-                        info.urls = urls;
+                        IceServerInfo.Builder info = new IceServerInfo.Builder();
+                        info.setUrls(urls);
                         
-                        if (server.has("Username")) info.username = server.get("Username").getAsString();
-                        else if (server.has("username")) info.username = server.get("username").getAsString();
+                        if (server.has("Username")) info.setUsername(server.get("Username").getAsString());
+                        else if (server.has("username")) info.setUsername(server.get("username").getAsString());
                         
-                        if (server.has("Password")) info.password = server.get("Password").getAsString();
-                        else if (server.has("password")) info.password = server.get("password").getAsString();
-                        else if (server.has("Credential")) info.password = server.get("Credential").getAsString();
-                        else if (server.has("credential")) info.password = server.get("credential").getAsString();
+                        if (server.has("Password")) info.setPassword(server.get("Password").getAsString());
+                        else if (server.has("password")) info.setPassword(server.get("password").getAsString());
+                        else if (server.has("Credential")) info.setPassword(server.get("Credential").getAsString());
+                        else if (server.has("credential")) info.setPassword(server.get("credential").getAsString());
 
-                        result.add(info);
+                        result.add(info.build());
                     }
                 }
             }

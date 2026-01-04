@@ -24,14 +24,26 @@ public class NetherNetDiscoverySignaling implements NetherNetClientSignaling, Ne
     private volatile InetSocketAddress remoteAddress;
     private final AtomicReference<String> discoveredServerId = new AtomicReference<>(null);
 
+    /**
+     * Creates a NetherNetDiscoverySignaling with a random local Network ID and binds to an ephemeral port.     * 
+     */
     public NetherNetDiscoverySignaling() {
         this(ThreadLocalRandom.current().nextLong(), new InetSocketAddress(0));
     }
 
+    /**
+     * Creates a NetherNetDiscoverySignaling with the specified local Network ID.
+     * @param localNetworkId The local Network ID to use.
+     */
     public NetherNetDiscoverySignaling(long localNetworkId) {
         this(localNetworkId, new InetSocketAddress(0));
     }
 
+    /**
+     * Creates a NetherNetDiscoverySignaling with the specified local Network ID and bind address.
+     * @param localNetworkId The local Network ID to use.
+     * @param bindAddress The address to bind the discovery socket to.
+     */
     public NetherNetDiscoverySignaling(long localNetworkId, InetSocketAddress bindAddress) {
         this.localNetworkId = Long.toUnsignedString(localNetworkId);
         this.discovery = new NetherNetDiscovery(localNetworkId);

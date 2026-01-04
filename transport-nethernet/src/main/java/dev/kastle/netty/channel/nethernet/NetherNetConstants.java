@@ -49,6 +49,13 @@ public class NetherNetConstants {
         }
     }
 
+    /**
+     * Encrypts a discovery packet using AES encryption and HMAC-SHA256 for integrity.
+     * 
+     * @param packet The ByteBuf containing the discovery packet to encrypt.
+     * @return The encrypted byte array ready for transmission.
+     * @throws Exception if encryption fails.
+     */
     public static byte[] encryptDiscoveryPacket(ByteBuf packet) throws Exception {
         int len = packet.readableBytes() + 2;
         ByteBuf payload = Unpooled.buffer(len);
@@ -79,6 +86,13 @@ public class NetherNetConstants {
         return out;
     }
 
+    /**
+     * Decrypts a discovery packet and verifies its integrity.
+     * 
+     * @param input The ByteBuf containing the received discovery packet.
+     * @return A ByteBuf with the decrypted payload, or null if verification fails.
+     * @throws Exception if decryption fails.
+     */
     public static ByteBuf decryptDiscoveryPacket(ByteBuf input) throws Exception {
         if (input.readableBytes() < 32) {
             log.debug("Discovery packet too short to contain valid signature");
@@ -112,14 +126,35 @@ public class NetherNetConstants {
         return payload;
     }
 
+    /**
+     * Builds a signaling message for a CONNECTREQUEST.
+     * 
+     * @param connectionId   The unique connection ID.
+     * @param sdp            The SDP payload.
+     * @return The formatted signaling message.
+     */
     public static String buildSignalConnectRequest(long connectionId, String sdp) {
         return SIGNAL_CONNECT_REQUEST + " " + Long.toUnsignedString(connectionId) + " " + sdp;
     }
 
+    /**
+     * Builds a signaling message for a CONNECTRESPONSE.
+     * 
+     * @param connectionId   The unique connection ID.
+     * @param sdp            The SDP payload.
+     * @return The formatted signaling message.
+     */
     public static String buildSignalConnectResponse(long connectionId, String sdp) {
         return SIGNAL_CONNECT_RESPONSE + " " + Long.toUnsignedString(connectionId) + " " + sdp;
     }
 
+    /**
+     * Builds a signaling message for a CANDIDATEADD.
+     * 
+     * @param connectionId   The unique connection ID.
+     * @param candidateSdp   The candidate SDP string.
+     * @return The formatted signaling message.
+     */
     public static String buildSignalCandidateAdd(long connectionId, String candidateSdp) {
         return SIGNAL_CANDIDATE_ADD + " " + Long.toUnsignedString(connectionId) + " " + candidateSdp;
     }

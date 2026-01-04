@@ -1,6 +1,7 @@
 package dev.kastle.netty.channel.nethernet;
 
-import dev.kastle.netty.channel.nethernet.config.NetherNetChannelConfig;
+import dev.kastle.netty.channel.nethernet.config.DefaultNetherServerChannelConfig;
+import dev.kastle.netty.channel.nethernet.config.NetherChannelOption;
 import dev.kastle.netty.channel.nethernet.signaling.NetherNetServerSignaling;
 import dev.kastle.netty.channel.nethernet.signaling.NetherNetSignaling.IceServerInfo;
 import dev.kastle.netty.channel.nethernet.signaling.NetherNetXboxSignaling;
@@ -22,31 +23,45 @@ import io.netty.channel.AbstractServerChannel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelMetadata;
 import io.netty.channel.EventLoop;
+import io.netty.util.concurrent.ScheduledFuture;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class NetherNetServerChannel extends AbstractServerChannel {
     private static final InternalLogger log = InternalLoggerFactory.getInstance(NetherNetServerChannel.class);
     private static final ChannelMetadata METADATA = new ChannelMetadata(false, 16);
 
-    private final NetherNetChannelConfig config = new NetherNetChannelConfig(this);
+    private final DefaultNetherServerChannelConfig config;
     private final PeerConnectionFactory factory;
     private final NetherNetServerSignaling signaling;
     
     private InetSocketAddress localAddress;
     private volatile boolean open = true;
 
+    /**
+     * Creates a NetherNetServerChannel with a new PeerConnectionFactory.
+     * 
+     * @param signaling The NetherNetServerSignaling instance for signaling.
+     */
     public NetherNetServerChannel(NetherNetServerSignaling signaling) {
         this(new PeerConnectionFactory(), signaling);
     }
 
+    /**
+     * Creates a NetherNetServerChannel.
+     * 
+     * @param factory The PeerConnectionFactory to use for creating peer connections. Should be reused where possible.
+     * @param signaling The NetherNetServerSignaling instance for signaling.
+     */
     public NetherNetServerChannel(PeerConnectionFactory factory, NetherNetServerSignaling signaling) {
         this.factory = factory;
         this.signaling = signaling;
+        this.config = new DefaultNetherServerChannelConfig(this);
     }
 
     @Override
@@ -74,11 +89,11 @@ public class NetherNetServerChannel extends AbstractServerChannel {
                 log.trace("Injecting {} ICE Servers into PeerConnection for {}", iceServers.size(), Long.toUnsignedString(connectionId));
                 for (IceServerInfo info : iceServers) {
                     RTCIceServer iceServer = new RTCIceServer();
-                    iceServer.urls = info.urls;
-                    iceServer.username = info.username;
-                    iceServer.password = info.password;
+                    iceServer.urls = info.urls();
+                    iceServer.username = info.username();
+                    iceServer.password = info.password();
                     rtcConfig.iceServers.add(iceServer);
-                    log.trace(" - Added ICE Server: {} (User: {})", info.urls, info.username);
+                    log.trace(" - Added ICE Server: {} (User: {})", info.urls(), info.username());
                 }
             } else {
                 log.warn("NetherNetXboxSignaling has NO ICE servers available! WAN connections will likely fail.");
@@ -90,6 +105,16 @@ public class NetherNetServerChannel extends AbstractServerChannel {
 
         NetherNetChildChannel child = new NetherNetChildChannel(this, pc, new InetSocketAddress(0), localAddress);
         observer.setChildChannel(child);
+
+        int handshakeTimeoutSeconds = this.config.getOption(NetherChannelOption.NETHER_SERVER_RTC_HANDSHAKE_TIMEOUT_SECONDS);
+        ScheduledFuture<?> timeoutTask = eventLoop().schedule(() -> {
+            if (!child.isActive()) {
+                log.warn("Connection {} timed out during handshake ({}s)", Long.toUnsignedString(connectionId), handshakeTimeoutSeconds);
+                child.close();
+                pc.close();
+            }
+        }, handshakeTimeoutSeconds, TimeUnit.SECONDS);
+        observer.setHandshakeTimeout(timeoutTask);
         
         // Register Signal Handler
         signaling.setSignalHandler(connectionId, (signal) -> {
@@ -149,9 +174,15 @@ public class NetherNetServerChannel extends AbstractServerChannel {
         private RTCDataChannel reliable;
         private RTCDataChannel unreliable;
 
+        private ScheduledFuture<?> handshakeTimeout;
+
         public ServerPeerConnectionObserver(long connectionId, String remoteNetworkId) {
             this.connectionId = connectionId;
             this.remoteNetworkId = remoteNetworkId;
+        }
+
+        public void setHandshakeTimeout(ScheduledFuture<?> handshakeTimeout) {
+            this.handshakeTimeout = handshakeTimeout;
         }
 
         public void setChildChannel(NetherNetChildChannel child) {
@@ -181,6 +212,15 @@ public class NetherNetServerChannel extends AbstractServerChannel {
         @Override
         public void onConnectionChange(RTCPeerConnectionState state) {
             log.debug("Connection {} state changed: {}", Long.toUnsignedString(this.connectionId), state);
+            if (state == RTCPeerConnectionState.FAILED || state == RTCPeerConnectionState.CLOSED) {
+                if (child != null && child.isOpen()) {
+                    log.debug("Closing connection {} due to state change: {}", Long.toUnsignedString(this.connectionId), state);
+                    child.close();
+                }
+                if (handshakeTimeout != null) {
+                    handshakeTimeout.cancel(false);
+                }
+            }
         }
 
         @Override
@@ -199,6 +239,10 @@ public class NetherNetServerChannel extends AbstractServerChannel {
         
         private void checkDataChannels() {
             if (child != null && reliable != null && unreliable != null) {
+                if (handshakeTimeout != null) {
+                    handshakeTimeout.cancel(false);
+                }
+
                 log.debug("Data Channels established for {}", Long.toUnsignedString(this.connectionId));
                 child.setDataChannels(reliable, unreliable);
                 

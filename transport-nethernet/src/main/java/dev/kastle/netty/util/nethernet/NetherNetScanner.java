@@ -16,7 +16,7 @@ import java.util.concurrent.ThreadLocalRandom;
 public class NetherNetScanner {
     public static void main(String[] args) throws Exception {
         long myNetworkId = ThreadLocalRandom.current().nextLong();
-        dev.kastle.netty.channel.nethernet.signaling.NetherNetDiscovery discovery = new NetherNetDiscovery(myNetworkId);
+        NetherNetDiscovery discovery = new NetherNetDiscovery(myNetworkId);
 
         discovery.bind(new InetSocketAddress("::", 0));
 

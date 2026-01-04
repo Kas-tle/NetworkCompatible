@@ -17,11 +17,23 @@ public interface NetherNetServerSignaling extends NetherNetSignaling {
 
     /**
      * Sets the advertisement data for the discovery mechanism (e.g. LAN Pong).
+     * 
+     * @param pongData The Pong advertisement data.
      */
     void setAdvertisementData(PongData pongData);
 
+    /**
+     * Functional interface for new connection handling.
+     */
     @FunctionalInterface
     interface NewConnectionHandler {
+        /**
+         * Called when a new connection is initiated by a remote peer.
+         *
+         * @param connectionId     The unique connection ID for this session.
+         * @param remoteNetworkId  The Network ID of the remote peer.
+         * @param payload          The initial signaling payload from the remote peer.
+         */
         void onConnect(long connectionId, String remoteNetworkId, String payload);
     }
 

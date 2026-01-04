@@ -1,5 +1,7 @@
 package dev.kastle.netty.channel.nethernet;
 
+import dev.kastle.netty.channel.nethernet.config.DefaultNetherClientChannelConfig;
+import dev.kastle.netty.channel.nethernet.config.NetherChannelOption;
 import dev.kastle.netty.channel.nethernet.config.NetherNetAddress;
 import dev.kastle.netty.channel.nethernet.signaling.NetherNetClientSignaling;
 import dev.kastle.netty.channel.nethernet.signaling.NetherNetSignaling;
@@ -46,20 +48,31 @@ public class NetherNetClientChannel extends NetherNetChannel {
 
     private ChannelPromise connectPromise;
 
-    private static final int HANDSHAKE_TIMEOUT_MS = 3000;
     private volatile ScheduledFuture<?> handshakeTimeoutTask;
 
     private volatile String localUfrag;
     
+    /**
+     * Creates a NetherNetClientChannel with a new PeerConnectionFactory.
+     * 
+     * @param signaling The NetherNetClientSignaling instance for signaling.
+     */
     public NetherNetClientChannel(NetherNetClientSignaling signaling) {
         this(new PeerConnectionFactory(), signaling);
     }
 
+    /**
+     * Creates a NetherNetClientChannel.
+     * 
+     * @param factory The PeerConnectionFactory to use. Should be reused where possible.
+     * @param signaling The NetherNetClientSignaling instance for signaling.
+     */
     public NetherNetClientChannel(PeerConnectionFactory factory, NetherNetClientSignaling signaling) {
         super(null, null, null);
         this.factory = factory;
         this.signaling = signaling;
         this.connectionId = this.cycleConnectionId();
+        this.config = new DefaultNetherClientChannelConfig(this);
     }
 
     public void setTargetNetworkId(String id) {
@@ -119,12 +132,14 @@ public class NetherNetClientChannel extends NetherNetChannel {
         log.debug("Starting Handshake with Connection ID: {}", Long.toUnsignedString(this.connectionId));
 
         if (handshakeTimeoutTask != null) handshakeTimeoutTask.cancel(false);
+
+        int handshakeTimeout = this.config().getOption(NetherChannelOption.NETHER_CLIENT_HANDSHAKE_TIMEOUT_MS);
         handshakeTimeoutTask = eventLoop().schedule(() -> {
             if (!handshakeComplete) {
                 log.debug("Handshake timed out. Resetting and Retrying...");
                 resetAndRetryHandshake();
             }
-        }, HANDSHAKE_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        }, handshakeTimeout, TimeUnit.MILLISECONDS);
 
         signaling.setSignalHandler(this.connectionId, this::handleSignal);
 
@@ -155,13 +170,8 @@ public class NetherNetClientChannel extends NetherNetChannel {
             peerConnection = null;
         }
 
-        // Remove handler for the failed connection ID
         signaling.removeSignalHandler(this.connectionId);
-
-        // Generate new ID for the new attempt
         this.cycleConnectionId();
-        
-        // Restart flow
         startHandshake();
     }
 
@@ -172,9 +182,9 @@ public class NetherNetClientChannel extends NetherNetChannel {
         if (iceServers != null) {
             for (NetherNetSignaling.IceServerInfo info : iceServers) {
                 RTCIceServer iceServer = new RTCIceServer();
-                iceServer.urls = info.urls;
-                iceServer.username = info.username;
-                iceServer.password = info.password;
+                iceServer.urls = info.urls();
+                iceServer.username = info.username();
+                iceServer.password = info.password();
                 rtcConfig.iceServers.add(iceServer);
             }
         }

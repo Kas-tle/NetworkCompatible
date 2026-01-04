@@ -15,7 +15,7 @@
  */
 
 plugins {
-    alias(libs.plugins.nmcp)
+    alias(libs.plugins.nmcp.aggregation)
     `maven-publish`
 }
 
@@ -102,21 +102,23 @@ subprojects {
             useJUnitPlatform()
         }
     }
+}
 
-    nmcp {
-        publishAllPublications {}
+dependencies {
+    allprojects {
+        nmcpAggregation(project(path))
     }
 }
 
 
-nmcp {
-    publishAggregation {
+nmcpAggregation {
+    centralPortal {
         project(":transport-raknet")
-        // TODO: Add publishing for transport-nethetnet
+        project(":transport-nethernet")
 
-        username.set(System.getenv("MAVEN_CENTRAL_USERNAME") ?: "username")
-        password.set(System.getenv("MAVEN_CENTRAL_PASSWORD") ?: "password")
-
-        publicationType.set("AUTOMATIC")
+        username.set(System.getenv("MAVEN_CENTRAL_USERNAME"))
+        password.set(System.getenv("MAVEN_CENTRAL_PASSWORD"))
+        
+        publishingType.set("AUTOMATIC")
     }
 }

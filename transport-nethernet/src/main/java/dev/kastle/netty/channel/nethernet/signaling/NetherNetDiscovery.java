@@ -37,6 +37,11 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
     private NetherNetServerSignaling.NewConnectionHandler newConnectionHandler;
     private BiConsumer<Long, ByteBuf> discoveryCallback;
 
+    /**
+     * Creates a NetherNetDiscovery instance with the specified Network ID.
+     * 
+     * @param networkId The Network ID to use for discovery.
+     */
     public NetherNetDiscovery(long networkId) {
         this.networkId = networkId;
     }

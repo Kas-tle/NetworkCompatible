@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: Kas-tle/NetworkCompatible/.github/setup-gradle-composite@master
       - name: Publish
-        run: ./gradlew publishAggregatedPublicationToCentralPortal
+        run: ./gradlew publishAggregationToCentralPortal
         env:
           MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
@@ -28,7 +28,7 @@ jobs:
       - name: Make Release Publication
         if: ${{ success() && github.repository == 'Kas-tle/NetworkCompatible' && github.ref_name == 'master' }}
         id: release
-        uses: Kas-tle/base-release-action@65d06f835be34757c6d73c16959c97e92c2a3c7f
+        uses: Kas-tle/base-release-action@b89ab10da9dfaa0b5fb0ca9e77679c7c7d1297f8
         with:
           files: |
             transport-raknet/build/libs/*.jar
@@ -42,7 +42,7 @@ jobs:
           releaseName: ${{ steps.version.outputs.version }}
           releaseBodyDependencyUsage: 'java'
           releaseBodyDependencyJavaGroupId: 'dev.kastle.netty'
-          releaseBodyDependencyJavaArtifactId: 'netty-transport-raknet'
+          releaseBodyDependencyJavaArtifactId: 'netty-transport-(raknet|nethernet)'
 
   upload-logs:
     name: Upload Logs
