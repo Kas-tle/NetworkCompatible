@@ -159,14 +159,16 @@ public class NetherNetClientChannel extends NetherNetChannel {
                     createAndSendOffer();
                 }
             } catch (Exception e) {
-                log.error("Failed to start WebRTC handshake", e);
-                if (connectPromise != null && !connectPromise.isDone()) connectPromise.tryFailure(e);
+                ConnectException ce = new ConnectException("Failed to start WebRTC handshake: " + e.getMessage());
+                ce.initCause(e);
+                if (connectPromise != null && !connectPromise.isDone()) connectPromise.tryFailure(ce);
                 if (handshakeTimeoutTask != null) handshakeTimeoutTask.cancel(false);
                 close();
             }
         }, eventLoop()).exceptionally(e -> {
-            log.error("Signaling connection failed", e);
-            if (connectPromise != null && !connectPromise.isDone()) connectPromise.tryFailure(e);
+            ConnectException ce = new ConnectException("Signaling connection failed: " + e.getMessage());
+            ce.initCause(e);
+            if (connectPromise != null && !connectPromise.isDone()) connectPromise.tryFailure(ce);
             if (handshakeTimeoutTask != null) handshakeTimeoutTask.cancel(false);
             close();
             return null;
