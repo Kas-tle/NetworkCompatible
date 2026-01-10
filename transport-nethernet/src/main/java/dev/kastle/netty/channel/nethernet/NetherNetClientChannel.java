@@ -28,6 +28,7 @@ import io.netty.util.concurrent.ScheduledFuture;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
@@ -51,7 +52,9 @@ public class NetherNetClientChannel extends NetherNetChannel {
     private volatile ScheduledFuture<?> handshakeTimeoutTask;
 
     private volatile String localUfrag;
-    
+
+    private int retryCount = 0;
+
     /**
      * Creates a NetherNetClientChannel with a new PeerConnectionFactory.
      * 
@@ -135,10 +138,7 @@ public class NetherNetClientChannel extends NetherNetChannel {
 
         int handshakeTimeout = this.config().getOption(NetherChannelOption.NETHER_CLIENT_HANDSHAKE_TIMEOUT_MS);
         handshakeTimeoutTask = eventLoop().schedule(() -> {
-            if (!handshakeComplete) {
-                log.debug("Handshake timed out. Resetting and Retrying...");
-                resetAndRetryHandshake();
-            }
+            resetAndRetryHandshake();
         }, handshakeTimeout, TimeUnit.MILLISECONDS);
 
         signaling.setSignalHandler(this.connectionId, this::handleSignal);
@@ -152,18 +152,37 @@ public class NetherNetClientChannel extends NetherNetChannel {
                     createAndSendOffer();
                 }
             } catch (Exception e) {
-                log.error("WebRTC Init failed", e);
-                // We don't fail promise here; we let the timeout task trigger a retry
+                // complete exceptionally on failure
+                log.error("Failed to start WebRTC handshake", e);
+                if (connectPromise != null && !connectPromise.isDone()) connectPromise.tryFailure(e);
+                if (handshakeTimeoutTask != null) handshakeTimeoutTask.cancel(false);
+                close();
             }
         }, eventLoop()).exceptionally(e -> {
             log.error("Signaling connection failed", e);
-            // Again, let timeout handle the retry loop
+            if (connectPromise != null && !connectPromise.isDone()) connectPromise.tryFailure(e);
+            if (handshakeTimeoutTask != null) handshakeTimeoutTask.cancel(false);
+            close();
             return null;
         });
     }
 
     private void resetAndRetryHandshake() {
         if (!isOpen()) return;
+        if (connectPromise != null && connectPromise.isDone() && !connectPromise.isSuccess()) return;
+        if (handshakeComplete) return;
+
+        // fail exceptionally if max retries reached
+        int maxRetries = this.config().getOption(NetherChannelOption.NETHER_CLIENT_MAX_HANDSHAKE_ATTEMPTS);
+        if (retryCount >= maxRetries) {
+            if (connectPromise != null && !connectPromise.isDone()) {
+                connectPromise.tryFailure(new ConnectException("Connection timed out after " + retryCount + " retries"));
+            }
+            close();
+            return;
+        }
+
+        retryCount++;
 
         if (peerConnection != null) {
             peerConnection.close();
@@ -197,28 +216,34 @@ public class NetherNetClientChannel extends NetherNetChannel {
                     log.warn("Generated ICE candidate before local ufrag was available. Skipping.");
                     return;
                 }
-
+                
                 String sdp = candidate.sdp.trim();
                 
                 // Format: <StandardSDP> ufrag <LocalUfrag> network-id <LocalNetworkID> network-cost 0
-                StringBuilder sb = new StringBuilder(sdp);
-                sb.append(" ufrag ").append(localUfrag);
-                sb.append(" network-id ").append(signaling.getLocalNetworkId());
-                sb.append(" network-cost 0");
+                StringBuilder sb = new StringBuilder(sdp)
+                    .append(" ufrag ").append(localUfrag)
+                    .append(" network-id ").append(signaling.getLocalNetworkId())
+                    .append(" network-cost 0");
 
-                signaling.sendSignal(
-                    targetNetworkId, 
-                    NetherNetConstants.buildSignalCandidateAdd(connectionId, sb.toString())
-                );
+                try {
+                    signaling.sendSignal(
+                        targetNetworkId, 
+                        NetherNetConstants.buildSignalCandidateAdd(connectionId, sb.toString())
+                    );
+                } catch (Exception e) {
+                    log.error("Failed to send ICE candidate", e);
+                    eventLoop().execute(() -> resetAndRetryHandshake());
+                }
             }
 
             @Override
             public void onConnectionChange(RTCPeerConnectionState state) {
                 if (state == RTCPeerConnectionState.FAILED) {
                     // Fast fail trigger: retry immediately instead of waiting for timeout
-                    eventLoop().execute(() -> {
-                        if (!handshakeComplete) resetAndRetryHandshake();
-                    });
+                    log.warn("PeerConnection entered FAILED state, resetting and retrying handshake.");
+                    eventLoop().execute(() -> resetAndRetryHandshake());
+                } else {
+                    log.debug("PeerConnection state changed to {}", state);
                 }
             }
 
@@ -254,10 +279,15 @@ public class NetherNetClientChannel extends NetherNetChannel {
                 peerConnection.setLocalDescription(description, new SetSessionDescriptionObserver() {
                     @Override
                     public void onSuccess() {
-                        signaling.sendSignal(
-                            targetNetworkId, 
-                            NetherNetConstants.buildSignalConnectRequest(connectionId, description.sdp)
-                        );
+                        try {
+                            signaling.sendSignal(
+                                targetNetworkId, 
+                                NetherNetConstants.buildSignalConnectRequest(connectionId, description.sdp)
+                            );
+                        } catch (Exception e) {
+                            log.error("Failed to send Connect Request", e);
+                            eventLoop().execute(() -> resetAndRetryHandshake());
+                        }
                     }
                     @Override public void onFailure(String error) { /* Retry handled by timeout */ }
                 });
@@ -299,9 +329,14 @@ public class NetherNetClientChannel extends NetherNetChannel {
                     peerConnection.addIceCandidate(new RTCIceCandidate("0", 0, data));
                 }
                 case NetherNetConstants.SIGNAL_CONNECT_ERROR -> {
-                    // Server rejected us (e.g. offline). Reset immediately.
-                    log.debug("Received SIGNAL_CONNECT_ERROR for {}", Long.toUnsignedString(this.connectionId));
-                    resetAndRetryHandshake();
+                    log.error("Received SIGNAL_CONNECT_ERROR for {}.", Long.toUnsignedString(this.connectionId));
+                    if (connectPromise != null && !connectPromise.isDone()) {
+                        connectPromise.tryFailure(new ConnectException("Remote peer sent connect error."));
+                    }
+                    close();
+                }
+                default -> {
+                    log.debug("Received unknown signal type: {}", type);
                 }
             }
         });

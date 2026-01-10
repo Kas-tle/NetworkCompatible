@@ -39,8 +39,7 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
 
     /**
      * Creates a NetherNetDiscovery instance with the specified Network ID.
-     * 
-     * @param networkId The Network ID to use for discovery.
+     * * @param networkId The Network ID to use for discovery.
      */
     public NetherNetDiscovery(long networkId) {
         this.networkId = networkId;
@@ -164,7 +163,7 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
         if (recipient != null) {
             sendSignal(recipient, targetNetworkId, data);
         } else {
-            log.warn("Attempted to send signal to unknown peer: {}", targetNetworkId);
+            throw new IllegalArgumentException("Attempted to send signal to unknown peer: " + targetNetworkId);
         }
     }
 
@@ -173,7 +172,7 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
             byte[] encrypted = NetherNetConstants.encryptDiscoveryPacket(packetData);
             channel.writeAndFlush(new DatagramPacket(Unpooled.wrappedBuffer(encrypted), target));
         } catch (Exception e) {
-            log.error("Failed to encrypt discovery packet", e);
+            throw new RuntimeException("Failed to encrypt discovery packet", e);
         } finally {
             packetData.release();
         }

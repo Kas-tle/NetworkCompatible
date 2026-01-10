@@ -11,6 +11,7 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -29,6 +30,8 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.net.SocketAddress;
 import java.net.URI;
+import java.net.UnknownHostException;
+import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +42,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+@Sharable
 public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebSocketFrame> implements NetherNetClientSignaling, NetherNetServerSignaling {
     private static final InternalLogger log = InternalLoggerFactory.getInstance(NetherNetXboxSignaling.class);
     private static final Gson gson = new Gson();
@@ -90,8 +94,13 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
 
     @Override
     public void bind(SocketAddress localAddress) {
-        // SocketAddress is ignored, we connect to the WS URL derived from NetworkID
-        connectInternal();
+        try {
+            connectInternal().join();
+        } catch (Exception e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            close(); 
+            throw new RuntimeException("Failed to bind Xbox Signaling: " + cause.getMessage(), cause);
+        }
     }
 
     private synchronized CompletableFuture<List<IceServerInfo>> connectInternal() {
@@ -159,10 +168,33 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
         }
     }
 
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        if (connectFuture != null && !connectFuture.isDone()) {
+            connectFuture.completeExceptionally(cause);
+        }
+        log.error("Signaling Exception: {}", cause.getMessage(), cause);
+        ctx.close();
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        synchronized (this) {
+            if (connectFuture != null) {
+                if (!connectFuture.isDone()) {
+                    connectFuture.completeExceptionally(new ClosedChannelException());
+                }
+                connectFuture = null;
+            }
+            this.channel = null;
+        }
+        super.channelInactive(ctx);
+    }
+
     private void startPingLoop(ChannelHandlerContext ctx) {
         ctx.executor().scheduleAtFixedRate(() -> {
             JsonObject ping = new JsonObject();
-            ping.addProperty("Type", 0); // RequestType::Ping
+            ping.addProperty("Type", 0); 
             ctx.writeAndFlush(new TextWebSocketFrame(gson.toJson(ping)));
         }, 5, 5, TimeUnit.SECONDS);
     }
@@ -176,7 +208,7 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
             msg.addProperty("Message", data);
             channel.writeAndFlush(new TextWebSocketFrame(gson.toJson(msg)));
         } else {
-            log.debug("Attempted to send signal to {} but WebSocket is closed or null!", targetNetworkId);
+            throw new IllegalStateException("Attempted to send signal to " + targetNetworkId + " but WebSocket is closed or null!");
         }
     }
 
@@ -195,16 +227,24 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
         String text = frame.text();
         try {
             JsonObject json = gson.fromJson(text, JsonObject.class);
-            if (!json.has("Type")) return;
+            if (!json.has("Type")) {
+                log.debug("Received signaling message without Type: {}", text);
+                return;
+            }
 
             int type = json.get("Type").getAsInt();
             switch (type) {
+                case 3 -> { // Accepted
+                    log.debug("Received Accepted message (3): {}", text);
+                }
                 case 2 -> { // Credentials
+                    log.debug("Received Credentials message (2): {}", text);
                     if (json.has("Message") && !connectFuture.isDone()) {
                         connectFuture.complete(parseTurnServers(json.get("Message").getAsString()));
                     }
                 }
                 case 1 -> { // Signal
+                    log.debug("Received Signal message (1): {}", text);
                     String sender = "0";
                     if (json.has("From")) {
                         sender = json.get("From").getAsString();
@@ -213,7 +253,13 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
                     if (json.has("Message")) {
                         String rawMsg = json.get("Message").getAsString();
                         dispatchSignal(sender, rawMsg);
-                    }   
+                    }
+                }
+                case 0 -> { // Not found
+                    log.debug("Received Not Found message for Network ID {} (0): {}", this.localNetworkId, text);
+                }
+                default -> {
+                    log.debug("Received unknown signaling message type {}: {}", type, text);
                 }
             }
         } catch (Exception e) {
@@ -222,7 +268,6 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
     }
 
     private void dispatchSignal(String sender, String rawMsg) {
-        // Format: TYPE CONNECTION_ID PAYLOAD
         try {
             String[] parts = rawMsg.split(" ", 3);
             if (parts.length >= 2) {

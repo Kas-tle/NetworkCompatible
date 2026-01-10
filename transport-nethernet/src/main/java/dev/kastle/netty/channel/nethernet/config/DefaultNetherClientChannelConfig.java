@@ -6,7 +6,8 @@ import io.netty.channel.ChannelOption;
 import java.util.Map;
 
 public class DefaultNetherClientChannelConfig extends DefaultNetherChannelConfig  {
-    private volatile int clientHandshakeTimeoutMs = 1000;
+    private volatile int clientHandshakeTimeoutMs = 3000;
+    private volatile int maxHandshakeAttempts = 3;
 
     public DefaultNetherClientChannelConfig(Channel channel) {
         super(channel);
@@ -15,7 +16,9 @@ public class DefaultNetherClientChannelConfig extends DefaultNetherChannelConfig
     @Override
     public Map<ChannelOption<?>, Object> getOptions() {
         return this.getOptions(
-                super.getOptions(), NetherChannelOption.NETHER_CLIENT_HANDSHAKE_TIMEOUT_MS
+                super.getOptions(), 
+                NetherChannelOption.NETHER_CLIENT_HANDSHAKE_TIMEOUT_MS, 
+                NetherChannelOption.NETHER_CLIENT_MAX_HANDSHAKE_ATTEMPTS
         );
     }
 
@@ -24,6 +27,8 @@ public class DefaultNetherClientChannelConfig extends DefaultNetherChannelConfig
     public <T> T getOption(ChannelOption<T> option) {
         if (option == NetherChannelOption.NETHER_CLIENT_HANDSHAKE_TIMEOUT_MS) {
             return (T) Integer.valueOf(this.clientHandshakeTimeoutMs);
+        } else if (option == NetherChannelOption.NETHER_CLIENT_MAX_HANDSHAKE_ATTEMPTS) {
+            return (T) Integer.valueOf(this.maxHandshakeAttempts);
         }
 
         return super.getOption(option);
@@ -36,6 +41,9 @@ public class DefaultNetherClientChannelConfig extends DefaultNetherChannelConfig
         if (option == NetherChannelOption.NETHER_CLIENT_HANDSHAKE_TIMEOUT_MS) {
             this.setClientHandshakeTimeoutMs((Integer) value);
             return true;
+        } else if (option == NetherChannelOption.NETHER_CLIENT_MAX_HANDSHAKE_ATTEMPTS) {
+            this.setMaxHandshakeAttempts((Integer) value);
+            return true;
         } else {
             return super.setOption(option, value);
         }
@@ -43,5 +51,9 @@ public class DefaultNetherClientChannelConfig extends DefaultNetherChannelConfig
 
     void setClientHandshakeTimeoutMs(int clientHandshakeTimeoutMs) {
         this.clientHandshakeTimeoutMs = clientHandshakeTimeoutMs;
+    }
+
+    void setMaxHandshakeAttempts(int maxHandshakeAttempts) {
+        this.maxHandshakeAttempts = maxHandshakeAttempts;
     }
 }
