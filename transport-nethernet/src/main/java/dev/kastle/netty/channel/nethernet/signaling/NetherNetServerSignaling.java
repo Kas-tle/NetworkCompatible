@@ -1,13 +1,17 @@
 package dev.kastle.netty.channel.nethernet.signaling;
 
+import java.net.ConnectException;
 import java.net.SocketAddress;
 import java.util.List;
 
 public interface NetherNetServerSignaling extends NetherNetSignaling {
     /**
      * Binds the signaling medium to listen for incoming connections (Server mode).
+     * 
+     * @param localAddress The local address to bind to.
+     * @throws ConnectException 
      */
-    void bind(SocketAddress localAddress);
+    void bind(SocketAddress localAddress) throws ConnectException;
 
     /**
      * Handler for new connections.

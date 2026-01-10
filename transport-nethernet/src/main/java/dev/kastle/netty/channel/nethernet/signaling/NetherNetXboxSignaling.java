@@ -29,6 +29,7 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
+import java.net.ConnectException;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.nio.channels.ClosedChannelException;
@@ -104,13 +105,20 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
     }
 
     @Override
-    public void bind(SocketAddress localAddress) {
+    public void bind(SocketAddress localAddress) throws ConnectException {
         try {
             connectInternal().join();
         } catch (Exception e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             close(); 
-            throw new RuntimeException("Failed to bind Xbox Signaling: " + cause.getMessage(), cause);
+            
+            if (cause instanceof ConnectException) {
+                throw (ConnectException) cause;
+            }
+            
+            ConnectException ce = new ConnectException("Failed to connect to Xbox Signaling: " + cause.getMessage());
+            ce.initCause(cause);
+            throw ce;
         }
     }
 
