@@ -156,8 +156,14 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
 
             this.channel = b.connect(uri.getHost(), 443).sync().channel();
         } catch (Exception e) {
-            log.error("Failed to connect to signaling service", e);
-            connectFuture.completeExceptionally(e);
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof ConnectException) {
+                connectFuture.completeExceptionally(cause);
+            } else {
+                 ConnectException ce = new ConnectException("Failed to connect to Xbox Signaling: " + cause.getMessage());
+                 ce.initCause(cause);
+                 connectFuture.completeExceptionally(ce);
+            }
         }
         return connectFuture;
     }

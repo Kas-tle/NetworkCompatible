@@ -98,6 +98,8 @@ public class NetherNetServerChannel extends AbstractServerChannel {
         NetherNetChildChannel child = new NetherNetChildChannel(this, pc, new InetSocketAddress(0), localAddress);
         observer.setChildChannel(child);
 
+        child.closeFuture().addListener(future -> signaling.removeSignalHandler(connectionId));
+
         int handshakeTimeoutSeconds = this.config.getOption(NetherChannelOption.NETHER_SERVER_RTC_HANDSHAKE_TIMEOUT_SECONDS);
         ScheduledFuture<?> timeoutTask = eventLoop().schedule(() -> {
             if (!child.isActive()) {
@@ -118,7 +120,11 @@ public class NetherNetServerChannel extends AbstractServerChannel {
             switch (type) {
                 case NetherNetConstants.RTC_NEGOTIATION_CANDIDATE_ADD -> {
                     log.trace("Applying Remote Candidate for {}: {}", Long.toUnsignedString(connectionId), data);
-                    pc.addIceCandidate(new RTCIceCandidate("0", 0, data));
+                    try {
+                        pc.addIceCandidate(new RTCIceCandidate("0", 0, data));
+                    } catch (Exception e) {
+                        log.debug("Failed to apply ICE candidate for {} (Connection likely closed): {}", Long.toUnsignedString(connectionId), e.toString());
+                    }
                 }
                 case NetherNetConstants.RTC_NEGOTIATION_CONNECT_ERROR -> {
                     log.debug("Received CONNECT_ERROR for {}", Long.toUnsignedString(connectionId));
