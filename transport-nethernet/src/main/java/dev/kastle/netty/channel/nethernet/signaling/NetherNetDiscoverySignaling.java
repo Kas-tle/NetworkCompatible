@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
 public class NetherNetDiscoverySignaling implements NetherNetClientSignaling, NetherNetServerSignaling {
     private static final InternalLogger log = InternalLoggerFactory.getInstance(NetherNetDiscoverySignaling.class);
@@ -33,6 +32,7 @@ public class NetherNetDiscoverySignaling implements NetherNetClientSignaling, Ne
 
     /**
      * Creates a NetherNetDiscoverySignaling with the specified local Network ID.
+     * 
      * @param localNetworkId The local Network ID to use.
      */
     public NetherNetDiscoverySignaling(long localNetworkId) {
@@ -41,8 +41,9 @@ public class NetherNetDiscoverySignaling implements NetherNetClientSignaling, Ne
 
     /**
      * Creates a NetherNetDiscoverySignaling with the specified local Network ID and bind address.
+     * 
      * @param localNetworkId The local Network ID to use.
-     * @param bindAddress The address to bind the discovery socket to.
+     * @param bindAddress    The address to bind the discovery socket to.
      */
     public NetherNetDiscoverySignaling(long localNetworkId, InetSocketAddress bindAddress) {
         this.localNetworkId = Long.toUnsignedString(localNetworkId);
@@ -149,7 +150,7 @@ public class NetherNetDiscoverySignaling implements NetherNetClientSignaling, Ne
     }
 
     @Override
-    public void setSignalHandler(long connectionId, Consumer<String> handler) {
+    public void setSignalHandler(long connectionId, SignalHandler handler) {
         this.discovery.registerSignalHandler(connectionId, handler);
     }
 
@@ -159,7 +160,7 @@ public class NetherNetDiscoverySignaling implements NetherNetClientSignaling, Ne
     }
 
     @Override
-    public void setNotFoundHandler(Consumer<String> handler) {
+    public void setNotFoundHandler(NetherNetClientSignaling.NotFoundHandler handler) {
         // Not implemented for Discovery signaling
     }
 

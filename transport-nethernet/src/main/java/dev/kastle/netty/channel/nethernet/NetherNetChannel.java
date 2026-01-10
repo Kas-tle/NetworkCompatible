@@ -43,7 +43,6 @@ public abstract class NetherNetChannel extends AbstractChannel {
         super(parent);
         this.remoteAddress = remote;
         this.localAddress = local;
-        this.config = new DefaultNetherChannelConfig(this);
     }
 
     public void setDataChannels(RTCDataChannel reliable, RTCDataChannel unreliable) {

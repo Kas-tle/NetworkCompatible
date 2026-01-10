@@ -1,7 +1,6 @@
 package dev.kastle.netty.channel.nethernet.signaling;
 
 import java.util.List;
-import java.util.function.Consumer;
 
 public interface NetherNetSignaling extends AutoCloseable {
 
@@ -15,15 +14,15 @@ public interface NetherNetSignaling extends AutoCloseable {
 
     /**
      * Sets a handler to receive signaling messages for a specific connection ID.
-     *
+     * 
      * @param connectionId The connection ID to listen for.
      * @param handler      The handler to process incoming signaling messages.
      */
-    void setSignalHandler(long connectionId, Consumer<String> handler);
+    void setSignalHandler(long connectionId, SignalHandler handler);
 
     /**
      * Removes the signaling handler for a specific connection ID.
-     *
+     * 
      * @param connectionId The connection ID whose handler should be removed.
      */
     void removeSignalHandler(long connectionId);
@@ -39,6 +38,19 @@ public interface NetherNetSignaling extends AutoCloseable {
      */
     @Override
     void close();
+
+    /**
+     * Functional interface for handling incoming signals.
+     */
+    @FunctionalInterface
+    interface SignalHandler {
+        /**
+         * Called when a signal is received for the registered connection ID.
+         * 
+         * @param signal The raw signal payload.
+         */
+        void onSignal(String signal);
+    }
 
     /**
      * Data structure for ICE server information.

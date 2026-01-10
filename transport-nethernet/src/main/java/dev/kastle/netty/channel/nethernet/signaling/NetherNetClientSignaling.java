@@ -3,7 +3,6 @@ package dev.kastle.netty.channel.nethernet.signaling;
 import java.net.SocketAddress;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
 
 public interface NetherNetClientSignaling extends NetherNetSignaling {
     /**
@@ -18,5 +17,18 @@ public interface NetherNetClientSignaling extends NetherNetSignaling {
      *
      * @param handler The handler to process incoming signaling messages for unknown connection IDs.
      */
-    void setNotFoundHandler(Consumer<String> handler);
+    void setNotFoundHandler(NotFoundHandler handler);
+
+    /**
+     * Functional interface for handling "Not Found" signals.
+     */
+    @FunctionalInterface
+    interface NotFoundHandler {
+        /**
+         * Called when the signaling service indicates the target peer was not found.
+         * 
+         * @param reason The reason or raw message payload regarding the failure.
+         */
+        void onNotFound(String reason);
+    }
 }

@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import dev.kastle.netty.channel.nethernet.NetherNetConstants;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -39,7 +40,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 @Sharable
 public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebSocketFrame> implements NetherNetClientSignaling, NetherNetServerSignaling {
@@ -54,9 +54,9 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
     private Channel channel;
     private CompletableFuture<List<IceServerInfo>> connectFuture;
 
-    private final Map<Long, Consumer<String>> handlers = new ConcurrentHashMap<>();
+    private final Map<Long, SignalHandler> handlers = new ConcurrentHashMap<>();
     private NetherNetServerSignaling.NewConnectionHandler newConnectionHandler;
-    private volatile Consumer<String> notFoundHandler;
+    private volatile NetherNetClientSignaling.NotFoundHandler notFoundHandler;
 
     private volatile List<IceServerInfo> iceServers = new ArrayList<>();
 
@@ -73,10 +73,21 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
         this.eventLoopGroup = new NioEventLoopGroup(1);
     }
 
+    /**
+     * Creates a NetherNetXboxSignaling instance.
+     * 
+     * @param localNetworkId The local Network ID to use.
+     * @param xboxToken      The Minecraft Bedrock Session authorization header ('MCToken ***').
+     */
     public NetherNetXboxSignaling(long localNetworkId, String xboxToken) {
         this(Long.toUnsignedString(localNetworkId), xboxToken);
     }
 
+    /**
+     * Creates a NetherNetXboxSignaling instance with a random local Network ID.
+     * 
+     * @param xboxToken The Minecraft Bedrock Session authorization header ('MCToken ***').
+     */
     public NetherNetXboxSignaling(String xboxToken) {
         this(Long.toUnsignedString(ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE)), xboxToken);
     }
@@ -153,7 +164,7 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
     }
 
     @Override
-    public void setNotFoundHandler(Consumer<String> handler) {
+    public void setNotFoundHandler(NotFoundHandler handler) {
         this.notFoundHandler = handler;
     }
 
@@ -174,12 +185,90 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
     }
 
     @Override
+    protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame frame) {
+        String text = frame.text();
+        try {
+            JsonObject json = gson.fromJson(text, JsonObject.class);
+            if (!json.has("Type")) {
+                log.debug("Ignored message without Type: {}", text);
+                return;
+            }
+
+            int type = json.get("Type").getAsInt();
+            switch (type) {
+                case NetherNetConstants.XBOX_SIGNAL_NOT_FOUND -> handleNotFound(json, text);
+                case NetherNetConstants.XBOX_SIGNAL_SIGNAL -> handleSignal(json);
+                case NetherNetConstants.XBOX_SIGNAL_CREDENTIALS -> handleCredentials(json, text);
+                case NetherNetConstants.XBOX_SIGNAL_ACCEPTED -> log.trace("Signal Accepted: {}", text);
+                case NetherNetConstants.XBOX_SIGNAL_ACK -> log.trace("Delivery Ack: {}", text);
+                default -> log.debug("Unknown message type {}: {}", type, text);
+            }
+        } catch (Exception e) {
+            log.error("Error processing signaling frame: " + text, e);
+        }
+    }
+
+    private void handleNotFound(JsonObject json, String rawText) {
+        log.debug("Peer Not Found. Payload: {}", rawText);
+        if (notFoundHandler != null) {
+            String reason = json.has("Message") ? json.get("Message").getAsString() : rawText;
+            notFoundHandler.onNotFound(reason);
+        }
+    }
+
+    private void handleSignal(JsonObject json) {
+        String sender = json.has("From") ? json.get("From").getAsString() : "0";
+        if (!json.has("Message")) {
+            log.warn("Received SIGNAL (1) without Message payload.");
+            return;
+        }
+
+        String rawMsg = json.get("Message").getAsString();
+        dispatchSignalToPipeline(sender, rawMsg);
+    }
+
+    private void handleCredentials(JsonObject json, String rawText) {
+        log.trace("Received Credentials: {}", rawText);
+        if (json.has("Message") && connectFuture != null && !connectFuture.isDone()) {
+            connectFuture.complete(parseTurnServers(json.get("Message").getAsString()));
+        }
+    }
+
+    @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
         if (connectFuture != null && !connectFuture.isDone()) {
             connectFuture.completeExceptionally(cause);
         }
         log.error("Signaling Exception: {}", cause.getMessage(), cause);
         ctx.close();
+    }
+
+    private void dispatchSignalToPipeline(String sender, String rawMsg) {
+        try {
+            // Signal Format: <Type> <ConnectionID> <Data>
+            String[] parts = rawMsg.split(" ", 3);
+            if (parts.length < 2) return;
+
+            long connectionId = Long.parseUnsignedLong(parts[1]);
+            
+            // Try specific connection handlers (Existing Connections)
+            SignalHandler handler = handlers.get(connectionId);
+            if (handler != null) {
+                handler.onSignal(rawMsg);
+                return;
+            }
+
+            // Try New Connection Handler (Server Mode)
+            if (NetherNetConstants.RTC_NEGOTIATION_CONNECT_REQUEST.equals(parts[0]) && newConnectionHandler != null) {
+                String payload = parts.length > 2 ? parts[2] : "";
+                newConnectionHandler.onConnect(connectionId, sender, payload);
+            }
+
+        } catch (NumberFormatException e) {
+            log.debug("Malformed Connection ID in signal: {}", rawMsg);
+        } catch (Exception e) {
+            log.error("Failed to dispatch signal: {}", rawMsg, e);
+        }
     }
 
     @Override
@@ -218,82 +307,13 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
     }
 
     @Override
-    public void setSignalHandler(long connectionId, Consumer<String> handler) {
+    public void setSignalHandler(long connectionId, SignalHandler handler) {
         this.handlers.put(connectionId, handler);
     }
 
     @Override
     public void removeSignalHandler(long connectionId) {
         this.handlers.remove(connectionId);
-    }
-
-    @Override
-    protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame frame) {
-        String text = frame.text();
-        try {
-            JsonObject json = gson.fromJson(text, JsonObject.class);
-            if (!json.has("Type")) {
-                log.debug("Received signaling message without Type: {}", text);
-                return;
-            }
-
-            int type = json.get("Type").getAsInt();
-            switch (type) {
-                case 4 -> { // Delivery Acknowledgement
-                    log.trace("Received Delivery Acknowledgement (4): {}", text);
-                }
-                case 3 -> { // Accepted
-                    log.trace("Received Accepted message (3): {}", text);
-                }
-                case 2 -> { // Credentials
-                    log.trace("Received Credentials message (2): {}", text);
-                    if (json.has("Message") && !connectFuture.isDone()) {
-                        connectFuture.complete(parseTurnServers(json.get("Message").getAsString()));
-                    }
-                }
-                case 1 -> { // Signal
-                    log.trace("Received Signal message (1): {}", text);
-                    String sender = "0";
-                    if (json.has("From")) {
-                        sender = json.get("From").getAsString();
-                    }
-
-                    if (json.has("Message")) {
-                        String rawMsg = json.get("Message").getAsString();
-                        dispatchSignal(sender, rawMsg);
-                    }
-                }
-                case 0 -> { // Not found
-                    log.debug("Received Not Found message for Network ID {} (0): {}", this.localNetworkId, text);
-                    if (notFoundHandler != null) {
-                        notFoundHandler.accept(text);
-                    }
-                }
-                default -> {
-                    log.debug("Received unknown signaling message type {}: {}", type, text);
-                }
-            }
-        } catch (Exception e) {
-            log.error("Signaling error processing frame: " + text, e);
-        }
-    }
-
-    private void dispatchSignal(String sender, String rawMsg) {
-        try {
-            String[] parts = rawMsg.split(" ", 3);
-            if (parts.length >= 2) {
-                long connectionId = Long.parseUnsignedLong(parts[1]);
-                Consumer<String> handler = handlers.get(connectionId);
-                if (handler != null) {
-                    handler.accept(rawMsg);
-                } else if ("CONNECTREQUEST".equals(parts[0]) && newConnectionHandler != null) {
-                    String payload = parts.length > 2 ? parts[2] : "";
-                    newConnectionHandler.onConnect(connectionId, sender, payload);
-                }
-            }
-        } catch (Exception e) {
-            log.debug("Failed to dispatch signal: {}", rawMsg);
-        }
     }
     
     private List<IceServerInfo> parseTurnServers(String jsonString) {

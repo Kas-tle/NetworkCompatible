@@ -21,11 +21,18 @@ public class NetherNetConstants {
     public static final int ID_DISCOVERY_RESPONSE = 0x01;
     public static final int ID_DISCOVERY_MESSAGE = 0x02;
 
-    // Signaling Message Types
-    public static final String SIGNAL_CONNECT_REQUEST = "CONNECTREQUEST";
-    public static final String SIGNAL_CONNECT_RESPONSE = "CONNECTRESPONSE";
-    public static final String SIGNAL_CANDIDATE_ADD = "CANDIDATEADD";
-    public static final String SIGNAL_CONNECT_ERROR = "CONNECTERROR";
+    // WebRTC Negotiation Message Types
+    public static final String RTC_NEGOTIATION_CONNECT_REQUEST = "CONNECTREQUEST";
+    public static final String RTC_NEGOTIATION_CONNECT_RESPONSE = "CONNECTRESPONSE";
+    public static final String RTC_NEGOTIATION_CANDIDATE_ADD = "CANDIDATEADD";
+    public static final String RTC_NEGOTIATION_CONNECT_ERROR = "CONNECTERROR";
+
+    // Xbox Signaling Message Types
+    public static final int XBOX_SIGNAL_NOT_FOUND = 0;
+    public static final int XBOX_SIGNAL_SIGNAL = 1;
+    public static final int XBOX_SIGNAL_CREDENTIALS = 2;
+    public static final int XBOX_SIGNAL_ACCEPTED = 3;
+    public static final int XBOX_SIGNAL_ACK = 4;
 
     // SCTP Constants
     public static final int MAX_SCTP_MESSAGE_SIZE = 10000;
@@ -134,7 +141,7 @@ public class NetherNetConstants {
      * @return The formatted signaling message.
      */
     public static String buildSignalConnectRequest(long connectionId, String sdp) {
-        return SIGNAL_CONNECT_REQUEST + " " + Long.toUnsignedString(connectionId) + " " + sdp;
+        return RTC_NEGOTIATION_CONNECT_REQUEST + " " + Long.toUnsignedString(connectionId) + " " + sdp;
     }
 
     /**
@@ -145,7 +152,7 @@ public class NetherNetConstants {
      * @return The formatted signaling message.
      */
     public static String buildSignalConnectResponse(long connectionId, String sdp) {
-        return SIGNAL_CONNECT_RESPONSE + " " + Long.toUnsignedString(connectionId) + " " + sdp;
+        return RTC_NEGOTIATION_CONNECT_RESPONSE + " " + Long.toUnsignedString(connectionId) + " " + sdp;
     }
 
     /**
@@ -156,6 +163,6 @@ public class NetherNetConstants {
      * @return The formatted signaling message.
      */
     public static String buildSignalCandidateAdd(long connectionId, String candidateSdp) {
-        return SIGNAL_CANDIDATE_ADD + " " + Long.toUnsignedString(connectionId) + " " + candidateSdp;
+        return RTC_NEGOTIATION_CANDIDATE_ADD + " " + Long.toUnsignedString(connectionId) + " " + candidateSdp;
     }
 }

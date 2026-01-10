@@ -1,5 +1,6 @@
 package dev.kastle.netty.channel.nethernet;
 
+import dev.kastle.netty.channel.nethernet.config.DefaultNetherChannelConfig;
 import dev.kastle.webrtc.RTCPeerConnection;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelPromise;
@@ -11,6 +12,7 @@ public class NetherNetChildChannel extends NetherNetChannel {
     public NetherNetChildChannel(Channel parent, RTCPeerConnection peerConnection, InetSocketAddress remote, InetSocketAddress local) {
         super(parent, remote, local);
         this.peerConnection = peerConnection;
+        this.config = new DefaultNetherChannelConfig(this);
     }
 
     @Override

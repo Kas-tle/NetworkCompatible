@@ -2,6 +2,7 @@ package dev.kastle.netty.channel.nethernet.signaling;
 
 import dev.kastle.netty.channel.nethernet.NetherNetConstants;
 import dev.kastle.netty.channel.nethernet.signaling.NetherNetServerSignaling.PongData;
+import dev.kastle.netty.channel.nethernet.signaling.NetherNetSignaling.SignalHandler;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -24,13 +25,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPacket> {
     private static final InternalLogger log = InternalLoggerFactory.getInstance(NetherNetDiscovery.class);
 
     private final long networkId;
-    private final Map<Long, Consumer<String>> signalHandlers = new ConcurrentHashMap<>();
+    private final Map<Long, SignalHandler> signalHandlers = new ConcurrentHashMap<>();
     private final Map<Long, InetSocketAddress> peerAddresses = new ConcurrentHashMap<>();
     private Channel channel;
     private byte[] pongData;
@@ -39,7 +39,8 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
 
     /**
      * Creates a NetherNetDiscovery instance with the specified Network ID.
-     * * @param networkId The Network ID to use for discovery.
+     * 
+     * @param networkId The Network ID to use for discovery.
      */
     public NetherNetDiscovery(long networkId) {
         this.networkId = networkId;
@@ -120,7 +121,7 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
         response.release();
     }
 
-    public void registerSignalHandler(long connectionId, Consumer<String> handler) {
+    public void registerSignalHandler(long connectionId, SignalHandler handler) {
         this.signalHandlers.put(connectionId, handler);
     }
     
@@ -275,11 +276,11 @@ public class NetherNetDiscovery extends SimpleChannelInboundHandler<DatagramPack
             String type = parts[0];
             long connectionId = Long.parseUnsignedLong(parts[1]);
             
-            Consumer<String> handler = signalHandlers.get(connectionId);
+            SignalHandler handler = signalHandlers.get(connectionId);
 
             if (handler != null) {
-                handler.accept(messageData);
-            } else if (NetherNetConstants.SIGNAL_CONNECT_REQUEST.equals(type)) {
+                handler.onSignal(messageData);
+            } else if (NetherNetConstants.RTC_NEGOTIATION_CONNECT_REQUEST.equals(type)) {
                 if (newConnectionHandler != null) {
                     String payload = parts.length > 2 ? parts[2] : "";
                     log.trace("Dispatching New Connection: ID={} Sender={}", Long.toUnsignedString(connectionId), Long.toUnsignedString(senderId));

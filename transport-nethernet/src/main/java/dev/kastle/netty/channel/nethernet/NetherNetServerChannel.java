@@ -4,7 +4,6 @@ import dev.kastle.netty.channel.nethernet.config.DefaultNetherServerChannelConfi
 import dev.kastle.netty.channel.nethernet.config.NetherChannelOption;
 import dev.kastle.netty.channel.nethernet.signaling.NetherNetServerSignaling;
 import dev.kastle.netty.channel.nethernet.signaling.NetherNetSignaling.IceServerInfo;
-import dev.kastle.netty.channel.nethernet.signaling.NetherNetXboxSignaling;
 import dev.kastle.webrtc.CreateSessionDescriptionObserver;
 import dev.kastle.webrtc.PeerConnectionFactory;
 import dev.kastle.webrtc.PeerConnectionObserver;
@@ -55,7 +54,7 @@ public class NetherNetServerChannel extends AbstractServerChannel {
     /**
      * Creates a NetherNetServerChannel.
      * 
-     * @param factory The PeerConnectionFactory to use for creating peer connections. Should be reused where possible.
+     * @param factory   The PeerConnectionFactory to use for creating peer connections. Should be reused where possible.
      * @param signaling The NetherNetServerSignaling instance for signaling.
      */
     public NetherNetServerChannel(PeerConnectionFactory factory, NetherNetServerSignaling signaling) {
@@ -81,22 +80,15 @@ public class NetherNetServerChannel extends AbstractServerChannel {
         rtcConfig.bundlePolicy = RTCBundlePolicy.MAX_BUNDLE;
 
         // Inject ICE servers if the signaling implementation supports it
-        if (this.signaling instanceof NetherNetXboxSignaling) {
-            NetherNetXboxSignaling xboxSignaling = (NetherNetXboxSignaling) this.signaling;
-            List<IceServerInfo> iceServers = xboxSignaling.getIceServers();
-            
-            if (iceServers != null && !iceServers.isEmpty()) {
-                log.trace("Injecting {} ICE Servers into PeerConnection for {}", iceServers.size(), Long.toUnsignedString(connectionId));
-                for (IceServerInfo info : iceServers) {
-                    RTCIceServer iceServer = new RTCIceServer();
-                    iceServer.urls = info.urls();
-                    iceServer.username = info.username();
-                    iceServer.password = info.password();
-                    rtcConfig.iceServers.add(iceServer);
-                    log.trace(" - Added ICE Server: {} (User: {})", info.urls(), info.username());
-                }
-            } else {
-                log.warn("NetherNetXboxSignaling has NO ICE servers available! WAN connections will likely fail.");
+        List<IceServerInfo> iceServers = this.signaling.getIceServers();
+        if (iceServers != null && !iceServers.isEmpty()) {
+            log.trace("Injecting {} ICE Servers into PeerConnection for {}", iceServers.size(), Long.toUnsignedString(connectionId));
+            for (IceServerInfo info : iceServers) {
+                RTCIceServer iceServer = new RTCIceServer();
+                iceServer.urls = info.urls();
+                iceServer.username = info.username();
+                iceServer.password = info.password();
+                rtcConfig.iceServers.add(iceServer);
             }
         }
 
@@ -124,11 +116,11 @@ public class NetherNetServerChannel extends AbstractServerChannel {
             String data = parts[2];
 
             switch (type) {
-                case NetherNetConstants.SIGNAL_CANDIDATE_ADD -> {
+                case NetherNetConstants.RTC_NEGOTIATION_CANDIDATE_ADD -> {
                     log.trace("Applying Remote Candidate for {}: {}", Long.toUnsignedString(connectionId), data);
                     pc.addIceCandidate(new RTCIceCandidate("0", 0, data));
                 }
-                case NetherNetConstants.SIGNAL_CONNECT_ERROR -> {
+                case NetherNetConstants.RTC_NEGOTIATION_CONNECT_ERROR -> {
                     log.debug("Received CONNECT_ERROR for {}", Long.toUnsignedString(connectionId));
                     child.close();
                 }

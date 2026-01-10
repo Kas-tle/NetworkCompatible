@@ -67,7 +67,7 @@ public class NetherNetClientChannel extends NetherNetChannel {
     /**
      * Creates a NetherNetClientChannel.
      * 
-     * @param factory The PeerConnectionFactory to use. Should be reused where possible.
+     * @param factory   The PeerConnectionFactory to use. Should be reused where possible.
      * @param signaling The NetherNetClientSignaling instance for signaling.
      */
     public NetherNetClientChannel(PeerConnectionFactory factory, NetherNetClientSignaling signaling) {
@@ -136,7 +136,7 @@ public class NetherNetClientChannel extends NetherNetChannel {
 
         if (handshakeTimeoutTask != null) handshakeTimeoutTask.cancel(false);
 
-        signaling.setNotFoundHandler(msg -> {
+        signaling.setNotFoundHandler(reason -> {
             if (connectPromise != null && !connectPromise.isDone()) {
                 connectPromise.tryFailure(new ConnectException("Target Network ID " + this.targetNetworkId + " not found or offline."));
             }
@@ -325,16 +325,16 @@ public class NetherNetClientChannel extends NetherNetChannel {
             if (!isOpen() || handshakeComplete) return;
 
             switch (type) {
-                case NetherNetConstants.SIGNAL_CONNECT_RESPONSE -> {
+                case NetherNetConstants.RTC_NEGOTIATION_CONNECT_RESPONSE -> {
                     peerConnection.setRemoteDescription(new RTCSessionDescription(RTCSdpType.ANSWER, data), new SetSessionDescriptionObserver() {
                         @Override public void onSuccess() {}
                         @Override public void onFailure(String e) { /* Retry handled by timeout */ }
                     });
                 }
-                case NetherNetConstants.SIGNAL_CANDIDATE_ADD -> {
+                case NetherNetConstants.RTC_NEGOTIATION_CANDIDATE_ADD -> {
                     peerConnection.addIceCandidate(new RTCIceCandidate("0", 0, data));
                 }
-                case NetherNetConstants.SIGNAL_CONNECT_ERROR -> {
+                case NetherNetConstants.RTC_NEGOTIATION_CONNECT_ERROR -> {
                     log.error("Received SIGNAL_CONNECT_ERROR for {}.", Long.toUnsignedString(this.connectionId));
                     if (connectPromise != null && !connectPromise.isDone()) {
                         connectPromise.tryFailure(new ConnectException("Remote peer sent connect error."));

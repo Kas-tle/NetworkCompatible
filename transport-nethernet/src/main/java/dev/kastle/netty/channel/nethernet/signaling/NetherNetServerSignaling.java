@@ -11,6 +11,7 @@ public interface NetherNetServerSignaling extends NetherNetSignaling {
 
     /**
      * Handler for new connections.
+     * 
      * @param handler Functional interface receiving (ConnectionID, RemoteNetworkID, Payload)
      */
     void setNewConnectionHandler(NewConnectionHandler handler);
