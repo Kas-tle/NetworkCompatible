@@ -35,12 +35,16 @@ These projects use this library to provide Raknet support. You can see their sou
 
 ### Client
 
+---
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../.github/readme/raknet_client_dark.svg">
   <img src="../.github/readme/raknet_client_light.svg">
 </picture>
 
 ### Server
+
+---
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../.github/readme/raknet_server_dark.svg">

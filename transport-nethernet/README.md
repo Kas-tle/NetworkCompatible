@@ -12,9 +12,8 @@ Snapshots are available from [jitpack](https://jitpack.io/#dev.kastle/NetworkCom
 
 ## Usage
 
-### Natives
-
-This library requires the platform-specific WebRTC native libraries at runtime. See [Kas-tle/webrtc-java](https://github.com/Kas-tle/webrtc-java?tab=readme-ov-file#usage) for instructions on how to include the native libraries in your project.
+> [!IMPORTANT]
+> This library requires the platform-specific WebRTC native libraries at runtime. See [Kas-tle/webrtc-java](https://github.com/Kas-tle/webrtc-java?tab=readme-ov-file#usage) for instructions on how to include the native libraries in your project.
 
 ### Examples
 
@@ -29,12 +28,16 @@ These projects use this library to provide Nethernet support. You can see their 
 
 ### Client
 
+---
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../.github/readme/nethernet_client_dark.svg">
   <img src="../.github/readme/nethernet_client_light.svg">
 </picture>
 
 ### Server
+
+---
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../.github/readme/nethernet_server_dark.svg">
