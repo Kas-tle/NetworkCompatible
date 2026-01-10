@@ -19,6 +19,10 @@ plugins {
     `maven-publish`
 }
 
+repositories {
+    mavenCentral()
+}
+
 subprojects {
     apply(plugin = "java-library")
     apply(plugin = "com.gradleup.nmcp")
