@@ -239,6 +239,9 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
 
             int type = json.get("Type").getAsInt();
             switch (type) {
+                case 4 -> { // Delivery Acknowledgement
+                    log.trace("Received Delivery Acknowledgement (4): {}", text);
+                }
                 case 3 -> { // Accepted
                     log.trace("Received Accepted message (3): {}", text);
                 }
