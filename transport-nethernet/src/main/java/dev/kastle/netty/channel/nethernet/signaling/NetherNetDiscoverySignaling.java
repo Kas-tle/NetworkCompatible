@@ -159,6 +159,11 @@ public class NetherNetDiscoverySignaling implements NetherNetClientSignaling, Ne
     }
 
     @Override
+    public void setNotFoundHandler(Consumer<String> handler) {
+        // Not implemented for Discovery signaling
+    }
+
+    @Override
     public void close() {
         this.discovery.close();
     }

@@ -136,6 +136,13 @@ public class NetherNetClientChannel extends NetherNetChannel {
 
         if (handshakeTimeoutTask != null) handshakeTimeoutTask.cancel(false);
 
+        signaling.setNotFoundHandler(msg -> {
+            if (connectPromise != null && !connectPromise.isDone()) {
+                connectPromise.tryFailure(new ConnectException("Target Network ID " + this.targetNetworkId + " not found or offline."));
+            }
+            close();
+        });
+
         int handshakeTimeout = this.config().getOption(NetherChannelOption.NETHER_CLIENT_HANDSHAKE_TIMEOUT_MS);
         handshakeTimeoutTask = eventLoop().schedule(() -> {
             resetAndRetryHandshake();
@@ -152,7 +159,6 @@ public class NetherNetClientChannel extends NetherNetChannel {
                     createAndSendOffer();
                 }
             } catch (Exception e) {
-                // complete exceptionally on failure
                 log.error("Failed to start WebRTC handshake", e);
                 if (connectPromise != null && !connectPromise.isDone()) connectPromise.tryFailure(e);
                 if (handshakeTimeoutTask != null) handshakeTimeoutTask.cancel(false);
@@ -243,7 +249,7 @@ public class NetherNetClientChannel extends NetherNetChannel {
                     log.warn("PeerConnection entered FAILED state, resetting and retrying handshake.");
                     eventLoop().execute(() -> resetAndRetryHandshake());
                 } else {
-                    log.debug("PeerConnection state changed to {}", state);
+                    log.trace("PeerConnection state changed to {}", state);
                 }
             }
 

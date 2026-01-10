@@ -30,7 +30,6 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.net.SocketAddress;
 import java.net.URI;
-import java.net.UnknownHostException;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,6 +56,7 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
 
     private final Map<Long, Consumer<String>> handlers = new ConcurrentHashMap<>();
     private NetherNetServerSignaling.NewConnectionHandler newConnectionHandler;
+    private volatile Consumer<String> notFoundHandler;
 
     private volatile List<IceServerInfo> iceServers = new ArrayList<>();
 
@@ -153,6 +153,11 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
     }
 
     @Override
+    public void setNotFoundHandler(Consumer<String> handler) {
+        this.notFoundHandler = handler;
+    }
+
+    @Override
     public void setAdvertisementData(PongData pongData) {
         // No-op for Xbox Signaling. 
         // Advertisement is handled via the Session Directory service (PUT /session/...).
@@ -235,16 +240,16 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
             int type = json.get("Type").getAsInt();
             switch (type) {
                 case 3 -> { // Accepted
-                    log.debug("Received Accepted message (3): {}", text);
+                    log.trace("Received Accepted message (3): {}", text);
                 }
                 case 2 -> { // Credentials
-                    log.debug("Received Credentials message (2): {}", text);
+                    log.trace("Received Credentials message (2): {}", text);
                     if (json.has("Message") && !connectFuture.isDone()) {
                         connectFuture.complete(parseTurnServers(json.get("Message").getAsString()));
                     }
                 }
                 case 1 -> { // Signal
-                    log.debug("Received Signal message (1): {}", text);
+                    log.trace("Received Signal message (1): {}", text);
                     String sender = "0";
                     if (json.has("From")) {
                         sender = json.get("From").getAsString();
@@ -257,6 +262,9 @@ public class NetherNetXboxSignaling extends SimpleChannelInboundHandler<TextWebS
                 }
                 case 0 -> { // Not found
                     log.debug("Received Not Found message for Network ID {} (0): {}", this.localNetworkId, text);
+                    if (notFoundHandler != null) {
+                        notFoundHandler.accept(text);
+                    }
                 }
                 default -> {
                     log.debug("Received unknown signaling message type {}: {}", type, text);
