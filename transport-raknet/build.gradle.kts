@@ -14,6 +14,10 @@
  * under the License.
  */
 
+plugins {
+    id("com.gradleup.nmcp")
+}
+
 description = "RakNet transport for Netty"
 
 dependencies {
