@@ -30,8 +30,8 @@ public class NetherNetXboxRpcSignaling extends AbstractNetherNetXboxSignaling {
      * @param networkId The Network ID to use.
      * @param xboxToken The Minecraft Bedrock Session authorization header ('MCToken ***').
      */
-    public NetherNetXboxRpcSignaling(String localNetworkId, String xboxToken) {
-        super(localNetworkId, xboxToken, URI.create("wss://signal.franchise.minecraft-services.net/ws/v1.0/messaging/connect"));
+    public NetherNetXboxRpcSignaling(String networkId, String xboxToken) {
+        super(networkId, xboxToken, URI.create("wss://signal.franchise.minecraft-services.net/ws/v1.0/messaging/connect"));
     }
 
     /**
