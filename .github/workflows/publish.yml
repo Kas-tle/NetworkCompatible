@@ -32,6 +32,7 @@ jobs:
         with:
           files: |
             transport-raknet/build/libs/*.jar
+            transport-nethernet/build/libs/*.jar
           appID: ${{ secrets.RELEASE_APP_ID }}
           appPrivateKey: ${{ secrets.RELEASE_APP_PK }}
           discordWebhook: ${{ secrets.DISCORD_WEBHOOK }}
