@@ -33,6 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
+import java.util.function.DoubleConsumer;
 
 /**
  * The one class where libwebrtc lives. Implements the backend seam against
@@ -465,6 +466,11 @@ public class LibWebRtcServerBackend implements WebRtcServerBackend {
                 // thrown into the caller's write path.
                 log.debug("Dropping send on session closed mid write: {}", e.toString());
             }
+        }
+
+        @Override
+        public void requestRtt(DoubleConsumer callback) {
+            WebRtcRtt.requestRtt(closedFlag ? null : this.pc, callback);
         }
 
         @Override

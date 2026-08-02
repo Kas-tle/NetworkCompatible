@@ -9,6 +9,7 @@ import io.netty.channel.ChannelMetadata;
 import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.EventLoop;
 import io.netty.util.ReferenceCountUtil;
+import io.netty.util.concurrent.ScheduledFuture;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -17,6 +18,8 @@ import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.function.DoubleConsumer;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -71,6 +74,12 @@ public abstract class NetherNetChannel extends AbstractChannel {
     private volatile boolean writesPaused;
 
     private volatile boolean transportOpen;
+
+    // Latest ICE round trip time in milliseconds, sampled periodically while
+    // the channel is active; negative until the first measurement arrives.
+    // Failed samples keep the last good value.
+    private volatile long rttMillis = -1;
+    private ScheduledFuture<?> rttSampler;
     protected volatile boolean open = true;
 
     /**
@@ -158,6 +167,10 @@ public abstract class NetherNetChannel extends AbstractChannel {
         }
 
         if (channelActiveFired.compareAndSet(false, true)) {
+            // Started before firing active: a handler that closes the channel
+            // synchronously from channelActive runs doClose first otherwise,
+            // and the sampler created afterwards would never be cancelled.
+            startRttSampler();
             pipeline().fireChannelActive();
         }
 
@@ -293,7 +306,12 @@ public abstract class NetherNetChannel extends AbstractChannel {
     @Override
     protected void doRegister() throws Exception {
         if (isActive()) {
+            // Netty's register flow fires channelActive itself for already
+            // active channels; pre set the flag so it is not fired twice, and
+            // start the sampler here since fireChannelActiveIfReady's CAS
+            // will never win on this path.
             channelActiveFired.set(true);
+            startRttSampler();
         }
     }
 
@@ -311,12 +329,48 @@ public abstract class NetherNetChannel extends AbstractChannel {
         doClose();
     }
 
+    /**
+     * @return the latest sampled transport round trip time in milliseconds,
+     *         or a negative value while no measurement is available yet
+     */
+    public long rttMillis() {
+        return rttMillis;
+    }
+
+    /**
+     * Requests one transport RTT measurement; the callback receives
+     * milliseconds or a negative value when unavailable. Subclasses with an
+     * RTT source override this.
+     */
+    protected void requestRttSample(DoubleConsumer callback) {
+        callback.accept(-1);
+    }
+
+    // Runs on the event loop, once, when the channel goes active.
+    private void startRttSampler() {
+        if (rttSampler != null || !isOpen()) {
+            return;
+        }
+        rttSampler = eventLoop().scheduleAtFixedRate(
+                () -> requestRttSample(ms -> {
+                    if (ms >= 0) {
+                        rttMillis = Math.round(ms);
+                    }
+                }),
+                1, 3, TimeUnit.SECONDS);
+    }
+
     @Override
     protected void doClose() throws Exception {
         this.open = false;
         this.transportOpen = false;
         this.writesPaused = false;
         this.engineOutstanding.set(0);
+
+        if (rttSampler != null) {
+            rttSampler.cancel(false);
+            rttSampler = null;
+        }
 
         Object msg;
         while ((msg = pendingWrites.poll()) != null) {

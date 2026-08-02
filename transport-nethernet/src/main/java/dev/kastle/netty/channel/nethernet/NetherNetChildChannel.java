@@ -8,6 +8,7 @@ import io.netty.channel.ChannelPromise;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.function.DoubleConsumer;
 
 /**
  * A server accepted NetherNet connection, backed by a
@@ -38,6 +39,16 @@ public class NetherNetChildChannel extends NetherNetChannel {
         WebRtcSession session = this.session;
         if (session != null) {
             session.send(toNioBuffer(framed));
+        }
+    }
+
+    @Override
+    protected void requestRttSample(DoubleConsumer callback) {
+        WebRtcSession session = this.session;
+        if (session != null) {
+            session.requestRtt(callback);
+        } else {
+            callback.accept(-1);
         }
     }
 

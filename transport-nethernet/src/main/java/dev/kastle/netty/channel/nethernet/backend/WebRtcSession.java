@@ -1,6 +1,7 @@
 package dev.kastle.netty.channel.nethernet.backend;
 
 import java.nio.ByteBuffer;
+import java.util.function.DoubleConsumer;
 
 /**
  * One negotiated WebRTC connection as seen by the NetherNet transport: a
@@ -31,6 +32,19 @@ public interface WebRtcSession {
      * @param candidateSdp the candidate SDP string
      */
     void addRemoteCandidate(String candidateSdp);
+
+    /**
+     * Requests the current ICE round trip time. The callback is invoked
+     * asynchronously, possibly on an engine thread, with the RTT in
+     * milliseconds, or a negative value when no measurement is available.
+     * The default implementation reports no measurement, so backends
+     * without an RTT source need not implement this.
+     *
+     * @param callback receives the RTT in milliseconds or a negative value
+     */
+    default void requestRtt(DoubleConsumer callback) {
+        callback.accept(-1);
+    }
 
     /**
      * Tears the session down. Idempotent; does not fire

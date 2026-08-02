@@ -1,5 +1,6 @@
 package dev.kastle.netty.channel.nethernet;
 
+import dev.kastle.netty.channel.nethernet.backend.WebRtcRtt;
 import dev.kastle.netty.channel.nethernet.config.DefaultNetherClientChannelConfig;
 import dev.kastle.netty.channel.nethernet.config.NetherChannelOption;
 import dev.kastle.netty.channel.nethernet.config.NetherNetAddress;
@@ -36,6 +37,7 @@ import java.nio.channels.ClosedChannelException;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.function.DoubleConsumer;
 
 public class NetherNetClientChannel extends NetherNetChannel {
     private static final InternalLogger log = InternalLoggerFactory.getInstance(NetherNetClientChannel.class);
@@ -106,6 +108,11 @@ public class NetherNetClientChannel extends NetherNetChannel {
     @Override
     public boolean isActive() {
         return super.isActive() && handshakeComplete;
+    }
+
+    @Override
+    protected void requestRttSample(DoubleConsumer callback) {
+        WebRtcRtt.requestRtt(this.peerConnection, callback);
     }
 
     @Override
