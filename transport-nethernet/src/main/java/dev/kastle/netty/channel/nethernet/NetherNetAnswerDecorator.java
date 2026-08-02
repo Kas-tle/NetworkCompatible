@@ -8,8 +8,9 @@ package dev.kastle.netty.channel.nethernet;
  * persists.
  *
  * Called from engine threads; implementations must be thread safe and
- * return promptly. A thrown exception makes the channel fall back to the
- * undecorated answer rather than dropping the exchange.
+ * return promptly. A thrown exception fails the exchange with a connect
+ * error: peers refuse undecorated answers only after parsing them, so an
+ * immediate error is the faster failure.
  */
 @FunctionalInterface
 public interface NetherNetAnswerDecorator {
@@ -20,7 +21,8 @@ public interface NetherNetAnswerDecorator {
      *
      * @param answerSdp the negotiated SDP answer
      * @return the SDP answer to signal to the peer
-     * @throws Exception if decoration fails; the undecorated answer is used
+     * @throws Exception if decoration fails; the exchange is failed with a
+     *                   connect error
      */
     String decorate(String answerSdp) throws Exception;
 }
