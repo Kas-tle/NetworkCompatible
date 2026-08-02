@@ -16,7 +16,6 @@ import io.netty.channel.EventLoop;
 import io.netty.util.concurrent.ScheduledFuture;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
-import org.jose4j.lang.JoseException;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -137,7 +136,11 @@ public class NetherNetServerChannel extends AbstractServerChannel {
      */
     private void establishConnection(PendingConnection pending, long connectionId, String offerSdp, String remoteNetworkId) {
         try {
-            NetherNetChildChannel child = new NetherNetChildChannel(this, generatePlaceholderAddress(), localAddress);
+            // An HTTP front end knows the peer's address from the request; ICE
+            // nomination later overwrites it with the actual candidate pair.
+            InetSocketAddress signaledAddress = signaling.remoteAddressOf(connectionId);
+            NetherNetChildChannel child = new NetherNetChildChannel(this,
+                    signaledAddress != null ? signaledAddress : generatePlaceholderAddress(), localAddress);
             // Fragment outbound data no larger than the client advertised it
             // can receive (a=max-message-size in its offer), falling back to
             // the conservative default when the client does not advertise one.
@@ -146,7 +149,7 @@ public class NetherNetServerChannel extends AbstractServerChannel {
             child.closeFuture().addListener(future -> signaling.removeSignalHandler(connectionId));
 
             WebRtcSession session = backend.accept(offerSdp, signaling.getIceServers(),
-                    new ChildSessionBridge(child, connectionId, remoteNetworkId));
+                    new ChildSessionBridge(child, connectionId, remoteNetworkId), signaling.fullIceAnswers());
             child.attachSession(session);
             pending.attach(child, session);
 
@@ -189,15 +192,20 @@ public class NetherNetServerChannel extends AbstractServerChannel {
         @Override
         public void onAnswerReady(String answerSdp) {
             String finalAnswer = answerSdp;
+            // The built in self signed identity keeps answers acceptable to
+            // 26.40 clients out of the box; consumers replace it to own the
+            // keys and domain of the assertion.
+            NetherNetAnswerDecorator decorator = config.getOption(NetherChannelOption.NETHER_SERVER_ANSWER_DECORATOR);
+            if (decorator == null) {
+                decorator = serverIdentity::augmentAnswer;
+            }
             try {
-                finalAnswer = serverIdentity.augmentAnswer(answerSdp);
-            } catch (JoseException e) {
-                // 26.40 clients refuse answers without the identity
-                // assertion; older clients ignore it. Sending the answer
-                // undecorated keeps the failure scoped to this handshake
-                // instead of letting it propagate into the engine callback
-                // that delivered the answer.
-                log.warn("Could not attach the identity assertion for {}; sending the answer undecorated: {}",
+                finalAnswer = decorator.decorate(answerSdp);
+            } catch (Exception e) {
+                // An undecorated answer is at worst refused by the client,
+                // which then falls back; dropping it would stall the
+                // exchange until the negotiation timeout.
+                log.warn("Answer decoration failed for {}: {}",
                         Long.toUnsignedString(connectionId), e.getMessage());
             }
             try {
