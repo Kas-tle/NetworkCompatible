@@ -2,31 +2,52 @@ package dev.kastle.netty.channel.nethernet.signaling;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.kastle.netty.channel.nethernet.NetherNetConstants;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 
 import java.net.URI;
 import java.nio.channels.ClosedChannelException;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
 
+@Sharable
 public class NetherNetXboxRpcSignaling extends AbstractNetherNetXboxSignaling {
     private static final Gson gson = new GsonBuilder().serializeNulls().create();
-    private final Map<String, CompletableFuture<JsonObject>> pendingRequests = new ConcurrentHashMap<>();
+
+    /** Interval for proactively re-fetching TURN credentials so peer
+     * connections created on a long-lived socket never receive expired ones. */
+    private static final long TURN_REFRESH_INTERVAL_SECONDS = 30 * 60;
+
+    /**
+     * An in-flight JSON-RPC request, tagged with the WebSocket channel it was
+     * written to so that a dying channel only fails its own requests. During
+     * a reconnect the old channel's inactive event must not fail requests
+     * already sent on the replacement socket.
+     */
+    private static final class PendingRequest {
+        final CompletableFuture<JsonObject> future;
+        final Channel channel;
+
+        PendingRequest(CompletableFuture<JsonObject> future, Channel channel) {
+            this.future = future;
+            this.channel = channel;
+        }
+    }
+
+    private final Map<String, PendingRequest> pendingRequests = new ConcurrentHashMap<>();
 
     /**
      * Creates a NetherNetXboxRpcSignaling instance.
-     * 
+     *
      * @param networkId The Network ID to use.
      * @param xboxToken The Minecraft Bedrock Session authorization header ('MCToken ***').
      */
@@ -36,7 +57,7 @@ public class NetherNetXboxRpcSignaling extends AbstractNetherNetXboxSignaling {
 
     /**
      * Creates a NetherNetXboxRpcSignaling instance.
-     * 
+     *
      * @param localNetworkId The local Network ID to use.
      * @param xboxToken      The Minecraft Bedrock Session authorization header ('MCToken ***').
      */
@@ -46,7 +67,7 @@ public class NetherNetXboxRpcSignaling extends AbstractNetherNetXboxSignaling {
 
     /**
      * Creates a NetherNetXboxRpcSignaling instance with a random local Network ID.
-     * 
+     *
      * @param xboxToken The Minecraft Bedrock Session authorization header ('MCToken ***').
      */
     public NetherNetXboxRpcSignaling(String xboxToken) {
@@ -55,22 +76,45 @@ public class NetherNetXboxRpcSignaling extends AbstractNetherNetXboxSignaling {
 
     @Override
     protected void onConnected(ChannelHandlerContext ctx) {
-        ctx.executor().scheduleAtFixedRate(() -> {
-            if (channel != null && channel.isActive()) {
-                sendJsonRpcRequest(NetherNetConstants.XBOX_RPC_METHOD_PING, new JsonObject());
-            }
-        }, 30, 50, TimeUnit.SECONDS);
+        scheduleRecurring(ctx, "rpc-ping", () ->
+                sendJsonRpcRequest(NetherNetConstants.XBOX_RPC_METHOD_PING, new JsonObject()), 30, 50);
 
+        scheduleRecurring(ctx, "turn-refresh", this::refreshTurnCredentials,
+                TURN_REFRESH_INTERVAL_SECONDS, TURN_REFRESH_INTERVAL_SECONDS);
+
+        refreshTurnCredentials();
+    }
+
+    /**
+     * Fetches TURN credentials and applies them via updateIceServers, which
+     * also completes the connect future during the initial exchange. On later
+     * refreshes a failure only logs; the previous credentials stay in place.
+     */
+    private void refreshTurnCredentials() {
         sendJsonRpcRequest(NetherNetConstants.XBOX_RPC_METHOD_TURN_AUTH, new JsonObject())
-            .thenAccept(response -> {
-                List<IceServerInfo> servers = parseTurnServers(response);
-                if (connectFuture != null && !connectFuture.isDone()) connectFuture.complete(servers);
-            })
+            .thenAccept(response -> updateIceServers(parseTurnServers(response)))
             .exceptionally(t -> {
                 log.error("Failed to fetch TURN credentials", t);
-                if (connectFuture != null && !connectFuture.isDone()) connectFuture.completeExceptionally(t);
+                synchronized (this) {
+                    if (connectFuture != null && !connectFuture.isDone()) connectFuture.completeExceptionally(t);
+                }
                 return null;
             });
+    }
+
+    @Override
+    protected void onChannelInactive(ChannelHandlerContext ctx) {
+        // Fail everything that was waiting on a reply over the dead socket so
+        // callers see a prompt error instead of a future that never completes.
+        // Only requests written to THIS channel: during a reconnect the old
+        // channel's inactive event must not fail the new socket's requests.
+        pendingRequests.entrySet().removeIf(entry -> {
+            if (entry.getValue().channel == ctx.channel()) {
+                entry.getValue().future.completeExceptionally(new ClosedChannelException());
+                return true;
+            }
+            return false;
+        });
     }
 
     @Override
@@ -92,13 +136,14 @@ public class NetherNetXboxRpcSignaling extends AbstractNetherNetXboxSignaling {
     private void handleResponse(JsonObject json) {
         if (!json.has("id") || json.get("id").isJsonNull()) return;
         String id = json.get("id").getAsString();
-        CompletableFuture<JsonObject> future = pendingRequests.remove(id);
-        
+        PendingRequest pending = pendingRequests.remove(id);
+        CompletableFuture<JsonObject> future = pending != null ? pending.future : null;
+
         if (future != null) {
             if (json.has("error") && !json.get("error").isJsonNull()) {
                 JsonObject error = json.getAsJsonObject("error");
                 String msg = error.has("message") ? error.get("message").getAsString() : error.toString();
-                
+
                 boolean isNotFound = msg.contains("Player not registered");
                 if (!isNotFound && error.has("data") && error.get("data").isJsonObject()) {
                     JsonObject data = error.getAsJsonObject("data");
@@ -125,16 +170,11 @@ public class NetherNetXboxRpcSignaling extends AbstractNetherNetXboxSignaling {
             case NetherNetConstants.XBOX_RPC_METHOD_RECEIVE_MESSAGE -> {
                 if (id != null) sendJsonRpcResult(id, null);
 
-                if (json.isJsonArray()) {
-                    JsonArray params = json.getAsJsonArray("params");
-                    if (params != null) {
-                        for (JsonElement el : params) processIncomingMessage(el.getAsJsonObject());
-                    }
-                } else if (json.isJsonObject()) {
-                    JsonObject params = json.getAsJsonObject("params");
-                    if (params != null) {
-                        processIncomingMessage(params);
-                    }
+                JsonElement params = json.get("params");
+                if (params != null && params.isJsonArray()) {
+                    for (JsonElement el : params.getAsJsonArray()) processIncomingMessage(el.getAsJsonObject());
+                } else if (params != null && params.isJsonObject()) {
+                    processIncomingMessage(params.getAsJsonObject());
                 }
             }
             case NetherNetConstants.XBOX_RPC_METHOD_PONG, NetherNetConstants.XBOX_RPC_METHOD_PING -> {
@@ -169,6 +209,7 @@ public class NetherNetXboxRpcSignaling extends AbstractNetherNetXboxSignaling {
 
     @Override
     public void sendSignal(String targetNetworkId, String data) {
+        var channel = this.channel;
         if (channel == null || !channel.isActive()) throw new IllegalStateException("Signaling channel is not active");
 
         JsonObject innerParams = new JsonObject();
@@ -200,9 +241,10 @@ public class NetherNetXboxRpcSignaling extends AbstractNetherNetXboxSignaling {
         rpc.addProperty("id", id);
 
         CompletableFuture<JsonObject> future = new CompletableFuture<>();
-        pendingRequests.put(id, future);
 
+        var channel = this.channel;
         if (channel != null && channel.isActive()) {
+            pendingRequests.put(id, new PendingRequest(future, channel));
             channel.writeAndFlush(new TextWebSocketFrame(gson.toJson(rpc)));
         } else {
             future.completeExceptionally(new ClosedChannelException());
@@ -215,6 +257,7 @@ public class NetherNetXboxRpcSignaling extends AbstractNetherNetXboxSignaling {
         response.add("id", id);
         response.add("result", result);
         response.addProperty("jsonrpc", "2.0");
+        var channel = this.channel;
         if (channel != null && channel.isActive()) channel.writeAndFlush(new TextWebSocketFrame(gson.toJson(response)));
     }
 }
