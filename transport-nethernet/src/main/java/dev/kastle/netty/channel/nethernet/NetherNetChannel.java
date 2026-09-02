@@ -1,11 +1,6 @@
 package dev.kastle.netty.channel.nethernet;
 
 import dev.kastle.netty.channel.nethernet.config.DefaultNetherChannelConfig;
-import dev.kastle.webrtc.RTCDataChannel;
-import dev.kastle.webrtc.RTCDataChannelBuffer;
-import dev.kastle.webrtc.RTCDataChannelObserver;
-import dev.kastle.webrtc.RTCDataChannelState;
-import dev.kastle.webrtc.RTCPeerConnection;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.AbstractChannel;
 import io.netty.channel.Channel;
@@ -22,22 +17,68 @@ import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Base netty channel for NetherNet connections. Deliberately thin: it moves
+ * already framed messages between the pipeline and the underlying WebRTC
+ * transport and manages activation state. NetherNet's countdown framing is
+ * NOT handled here; pipelines built on this channel must install
+ * {@link dev.kastle.netty.channel.nethernet.codec.NetherNetFramingCodec},
+ * which performs fragmentation and reassembly. Messages written to this
+ * channel are therefore expected to already carry their framing header and
+ * fit within the negotiated maximum message size, and messages fired into
+ * the pipeline still carry their header byte.
+ */
 public abstract class NetherNetChannel extends AbstractChannel {
     private static final InternalLogger log = InternalLoggerFactory.getInstance(NetherNetChannel.class);
     protected static final ChannelMetadata METADATA = new ChannelMetadata(false);
 
+    /**
+     * Stop handing messages to the engine once this many bytes sit unsent in
+     * its buffer. The engine's own buffer is finite and overflowing it kills
+     * the connection, so above this mark writes stay queued in netty's
+     * outbound buffer (flipping the channel's writability flag) and the
+     * remote peer's receive rate paces the flow.
+     */
+    private static final long ENGINE_HIGH_WATER_MARK = 2 * 1024 * 1024;
+    /** Resume handing messages to the engine below this many unsent bytes. */
+    private static final long ENGINE_RESUME_LOW_WATER_MARK = 512 * 1024;
+    /**
+     * A peer that cannot drain the engine buffer AND lets this many bytes
+     * accumulate behind it is not experiencing a burst, it is unrecoverably
+     * slow; close deterministically instead of queueing without bound.
+     */
+    private static final long MAX_BACKLOG_BYTES = 8 * 1024 * 1024;
+
     protected DefaultNetherChannelConfig config;
-    protected volatile RTCPeerConnection peerConnection;
     protected volatile SocketAddress remoteAddress;
     protected volatile SocketAddress localAddress;
 
-    protected RTCDataChannel reliableChannel;
-    protected RTCDataChannel unreliableChannel;
+    private final Queue<Object> pendingWrites = new ConcurrentLinkedQueue<>();
+    private final AtomicBoolean channelActiveFired = new AtomicBoolean();
 
-    protected final Queue<Object> pendingWrites = new ConcurrentLinkedQueue<>();
+    // Bytes handed to the engine and not yet reported sent via
+    // onEngineBytesSent. Incremented on the event loop, decremented on engine
+    // threads.
+    private final AtomicLong engineOutstanding = new AtomicLong();
+    // Set on the event loop when doWrite pauses on the high water mark; the
+    // engine thread that drains below the low water mark clears it and
+    // schedules the resume flush. While at least ENGINE_HIGH_WATER_MARK bytes
+    // are outstanding, more sent callbacks are guaranteed, so a set flag is
+    // always observed.
+    private volatile boolean writesPaused;
 
+    private volatile boolean transportOpen;
     protected volatile boolean open = true;
+
+    /**
+     * Maximum outbound SCTP message size in bytes, the a=max-message-size the
+     * remote peer advertised. Read live by the framing codec so a value
+     * negotiated after pipeline construction is honored.
+     */
+    private volatile int maxOutboundMessageSize = NetherNetConstants.MAX_SCTP_MESSAGE_SIZE;
 
     protected NetherNetChannel(Channel parent, InetSocketAddress remote, InetSocketAddress local) {
         super(parent);
@@ -45,84 +86,84 @@ public abstract class NetherNetChannel extends AbstractChannel {
         this.localAddress = local;
     }
 
-    public void setDataChannels(RTCDataChannel reliable, RTCDataChannel unreliable) {
-        this.reliableChannel = reliable;
-        this.unreliableChannel = unreliable;
-
-        RTCDataChannelObserver observer = new RTCDataChannelObserver() {
-            private final ByteBuf assemblyBuf = config.getAllocator().buffer();
-            private int currentSegmentCount = -1;
-
-            @Override
-            public void onBufferedAmountChange(long previousAmount) {
-            }
-
-            @Override
-            public void onStateChange() {
-                eventLoop().execute(() -> onDataChannelStateChange());
-            }
-
-            @Override
-            public void onMessage(RTCDataChannelBuffer buffer) {
-                ByteBuffer data = buffer.data;
-                if (!data.hasRemaining())
-                    return;
-
-                int segments = data.get() & 0xFF;
-
-                if (currentSegmentCount == -1) {
-                    currentSegmentCount = segments;
-                } else {
-                    if (segments != currentSegmentCount - 1) {
-                        assemblyBuf.clear();
-                        currentSegmentCount = -1;
-                        return;
-                    }
-                    currentSegmentCount = segments;
-                }
-
-                if (data.hasRemaining()) {
-                    byte[] payload = new byte[data.remaining()];
-                    data.get(payload);
-                    assemblyBuf.writeBytes(payload);
-                }
-
-                if (segments == 0) {
-                    try {
-                        if (assemblyBuf.isReadable()) {
-                            ByteBuf packet = assemblyBuf.copy();
-                            assemblyBuf.skipBytes(assemblyBuf.readableBytes());
-
-                            eventLoop().execute(() -> {
-                                pipeline().fireChannelRead(packet);
-                                pipeline().fireChannelReadComplete();
-                            });
-                        }
-                    } catch (Exception e) {
-                        log.error("Error processing packet", e);
-                    } finally {
-                        assemblyBuf.clear();
-                        currentSegmentCount = -1;
-                    }
-                }
-            }
-        };
-
-        this.reliableChannel.registerObserver(observer);
-
-        if (reliableChannel.getState() == RTCDataChannelState.OPEN) {
-            eventLoop().execute(this::onDataChannelStateChange);
+    /**
+     * Sets the maximum outbound SCTP message size, in bytes, for this channel.
+     * Should be the {@code a=max-message-size} the remote peer advertised in
+     * its SDP. Values too small to leave room for the fragment header are
+     * ignored.
+     *
+     * @param size the negotiated maximum message size
+     */
+    public void setMaxOutboundMessageSize(int size) {
+        if (size > 1) {
+            this.maxOutboundMessageSize = size;
         }
     }
 
-    private void onDataChannelStateChange() {
-        if (isActive()) {
-            if (!pendingWrites.isEmpty()) {
-                pipeline().fireChannelWritabilityChanged();
-                unsafe().flush();
-            }
-        } else if (reliableChannel.getState() == RTCDataChannelState.CLOSED) {
-            close();
+    public int getMaxOutboundMessageSize() {
+        return maxOutboundMessageSize;
+    }
+
+    /**
+     * Signals that the underlying transport can carry traffic. Safe to call
+     * from any thread; fires channelActive on the event loop once the channel
+     * is also registered.
+     */
+    protected void markTransportOpen() {
+        transportOpen = true;
+        if (isRegistered()) {
+            eventLoop().execute(this::fireChannelActiveIfReady);
+        }
+    }
+
+    protected void markTransportClosed() {
+        transportOpen = false;
+    }
+
+    /**
+     * Delivers one raw framed message from the transport into the pipeline.
+     * Safe to call from engine threads: the callback scoped buffer is copied
+     * exactly once here, then handed to the event loop in arrival order.
+     */
+    protected void deliverInbound(ByteBuffer data) {
+        if (!open || !data.hasRemaining()) {
+            return;
+        }
+        ByteBuf copy = config.getAllocator().buffer(data.remaining());
+        copy.writeBytes(data);
+        try {
+            eventLoop().execute(() -> {
+                fireChannelActiveIfReady();
+                pipeline().fireChannelRead(copy);
+                pipeline().fireChannelReadComplete();
+            });
+        } catch (Exception e) {
+            // Event loop rejected the task (shutdown race); do not leak.
+            copy.release();
+        }
+    }
+
+    protected void fireChannelActiveIfReady() {
+        if (!isRegistered() || !isActive()) {
+            return;
+        }
+
+        // Callers include native WebRTC callback threads (data channel state
+        // changes). The pipeline fire methods would marshal themselves, but
+        // unsafe().flush() is event loop only, so hop for the whole body.
+        EventLoop loop = eventLoop();
+        if (!loop.inEventLoop()) {
+            loop.execute(this::fireChannelActiveIfReady);
+            return;
+        }
+
+        if (channelActiveFired.compareAndSet(false, true)) {
+            pipeline().fireChannelActive();
+        }
+
+        if (!pendingWrites.isEmpty()) {
+            pipeline().fireChannelWritabilityChanged();
+            unsafe().flush();
         }
     }
 
@@ -139,9 +180,12 @@ public abstract class NetherNetChannel extends AbstractChannel {
         }
 
         while (!pendingWrites.isEmpty()) {
+            if (engineSaturated(in)) {
+                return;
+            }
             Object msg = pendingWrites.poll();
             try {
-                writeInternal(msg);
+                writeFramed(msg);
             } finally {
                 ReferenceCountUtil.release(msg);
             }
@@ -149,51 +193,108 @@ public abstract class NetherNetChannel extends AbstractChannel {
 
         Object msg;
         while ((msg = in.current()) != null) {
-            writeInternal(msg);
+            if (engineSaturated(in)) {
+                return;
+            }
+            writeFramed(msg);
             in.remove();
         }
     }
 
-    private void writeInternal(Object msg) {
-        if (!(msg instanceof ByteBuf))
-            return;
-
-        ByteBuf payload = (ByteBuf) msg;
-
-        ByteBuf framed = payload.retainedDuplicate();
-
-        int totalLength = framed.readableBytes();
-        int maxPayload = NetherNetConstants.MAX_SCTP_MESSAGE_SIZE - 1;
-
-        int segments = (totalLength / maxPayload);
-        if (totalLength % maxPayload != 0)
-            segments++;
-
-        try {
-            int offset = 0;
-            for (int i = 0; i < segments; i++) {
-                int remaining = segments - 1 - i;
-                int chunkSize = Math.min(maxPayload, framed.readableBytes() - offset);
-
-                ByteBuffer chunk = ByteBuffer.allocateDirect(1 + chunkSize);
-                chunk.put((byte) remaining);
-
-                framed.getBytes(offset, chunk);
-                chunk.position(chunk.limit());
-                chunk.flip();
-
-                reliableChannel.send(new RTCDataChannelBuffer(chunk, true));
-                offset += chunkSize;
-            }
-        } catch (Exception e) {
-            pipeline().fireExceptionCaught(e);
-        } finally {
-            framed.release();
+    /**
+     * True while the engine's send buffer holds too much unsent data to
+     * accept more. Leaves the remaining messages queued (netty's outbound
+     * buffer plus the pre-activation queue); {@link #onEngineBytesSent}
+     * resumes the flush once the buffer drains. A peer whose backlog also
+     * exceeds the hard cap is closed instead.
+     */
+    private boolean engineSaturated(ChannelOutboundBuffer in) {
+        if (engineOutstanding.get() < ENGINE_HIGH_WATER_MARK) {
+            return false;
         }
+        writesPaused = true;
+        if (in.totalPendingWriteBytes() > MAX_BACKLOG_BYTES) {
+            log.warn("Closing {}: peer cannot keep up ({} bytes unsent in the engine, {} bytes backlogged)",
+                remoteAddress, engineOutstanding.get(), in.totalPendingWriteBytes());
+            close();
+        }
+        return true;
+    }
+
+    /**
+     * Reports engine buffer drain progress (bytes written to the wire).
+     * Called from engine threads via the session listener; resumes a paused
+     * write path once the buffer is below the low water mark.
+     */
+    protected void onEngineBytesSent(long bytes) {
+        long outstanding = engineOutstanding.addAndGet(-bytes);
+        if (outstanding < 0) {
+            // Sends dropped by the engine or counter reset races; clamp.
+            engineOutstanding.compareAndSet(outstanding, 0);
+            outstanding = 0;
+        }
+        if (writesPaused && outstanding <= ENGINE_RESUME_LOW_WATER_MARK) {
+            writesPaused = false;
+            try {
+                eventLoop().execute(() -> {
+                    if (open) {
+                        unsafe().flush();
+                    }
+                });
+            } catch (Exception ignored) {
+                // Event loop rejected the task (shutdown race).
+            }
+        }
+    }
+
+    private void writeFramed(Object msg) {
+        if (!(msg instanceof ByteBuf)) {
+            return;
+        }
+        ByteBuf framed = (ByteBuf) msg;
+        int bytes = framed.readableBytes();
+        // Count before handing to the engine: its bytes sent callback fires
+        // from engine threads and can beat the statement after sendFramed,
+        // where a subtract first would clamp to zero and the late increment
+        // would inflate the counter permanently, wedging the write gate.
+        engineOutstanding.addAndGet(bytes);
+        try {
+            sendFramed(framed);
+        } catch (Exception e) {
+            engineOutstanding.addAndGet(-bytes);
+            pipeline().fireExceptionCaught(e);
+        }
+    }
+
+    /**
+     * Ships one already framed message (header byte included, at most the
+     * negotiated maximum message size) to the transport. Must not take
+     * ownership of the buffer; the caller releases it. Runs on the event
+     * loop.
+     */
+    protected abstract void sendFramed(ByteBuf framed);
+
+    /**
+     * Converts a framed buffer into a NIO buffer suitable for the WebRTC
+     * send path, which requires position and limit to delimit the payload
+     * and handles direct memory most efficiently.
+     */
+    protected static ByteBuffer toNioBuffer(ByteBuf framed) {
+        ByteBuffer nio = framed.nioBuffer();
+        if (!nio.isDirect()) {
+            ByteBuffer direct = ByteBuffer.allocateDirect(nio.remaining());
+            direct.put(nio);
+            direct.flip();
+            return direct;
+        }
+        return nio;
     }
 
     @Override
     protected void doRegister() throws Exception {
+        if (isActive()) {
+            channelActiveFired.set(true);
+        }
     }
 
     @Override
@@ -213,18 +314,9 @@ public abstract class NetherNetChannel extends AbstractChannel {
     @Override
     protected void doClose() throws Exception {
         this.open = false;
-
-        if (reliableChannel != null) {
-            reliableChannel.unregisterObserver();
-            reliableChannel.close();
-        }
-        if (unreliableChannel != null) {
-            unreliableChannel.unregisterObserver();
-            unreliableChannel.close();
-        }
-        if (peerConnection != null) {
-            peerConnection.close();
-        }
+        this.transportOpen = false;
+        this.writesPaused = false;
+        this.engineOutstanding.set(0);
 
         Object msg;
         while ((msg = pendingWrites.poll()) != null) {
@@ -263,7 +355,7 @@ public abstract class NetherNetChannel extends AbstractChannel {
 
     @Override
     public boolean isActive() {
-        return isOpen() && this.reliableChannel != null && this.reliableChannel.getState() == RTCDataChannelState.OPEN;
+        return isOpen() && transportOpen;
     }
 
     @Override
